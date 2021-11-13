@@ -41,9 +41,16 @@ class Time(object):
 
 	@classmethod
 	def localZone(self):
-		if time.daylight: offsetHour = time.altzone / 3600
-		else: offsetHour = time.timezone / 3600
-		return 'Etc/GMT%+d' % offsetHour
+		try:
+			if time.daylight: # 1 if defined as DST zone
+				local_time = time.localtime()
+				if local_time.tm_isdst: offsetHour = time.altzone / 3600
+				else: offsetHour = time.timezone / 3600
+			else: offsetHour = time.timezone / 3600
+			return 'Etc/GMT%+d' % offsetHour
+		except:
+			from resources.lib.modules import log_utils
+			log_utils.error()
 
 	@classmethod
 	def convert(self, stringTime, stringDay=None, abbreviate=False, formatInput=FormatTimeShort, formatOutput=None, zoneFrom=ZoneUtc, zoneTo=ZoneLocal):

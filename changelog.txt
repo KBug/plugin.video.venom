@@ -1,3 +1,7 @@
+[B][COLOR red]Update - v5.2.0 - Nov. 13, 2021[/COLOR][/B]
+[COLOR yellow]--[/COLOR][I] Update for Leia users for compatibility with latest version of Fenom Scrapers.[/I]
+[COLOR yellow]--[/COLOR][I] This is a one shot deal to get Venom back to working, there will be no further updates and it is advised to update to Matrix.[/I]
+
 
 [B][COLOR red]Update - v5.1.9 - June 19, 2021[/COLOR][/B]
 [COLOR yellow]--[/COLOR][I] Added new setting to "Sources Options" called "Terminate on Cloud Sources".  Now if cloud

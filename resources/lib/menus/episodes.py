@@ -461,9 +461,11 @@ class Episodes:
 						elif not values['premiered']: values['unaired'] = 'true'
 						elif int(re.sub(r'[^0-9]', '', str(values['premiered']))) > int(re.sub(r'[^0-9]', '', str(self.today_date))): values['unaired'] = 'true'
 						elif int(re.sub(r'[^0-9]', '', str(values['premiered']))) == int(re.sub(r'[^0-9]', '', str(self.today_date))):
-							time_now = (self.date_time).strftime('%X')
-							if int(re.sub(r'[^0-9]', '', str(values['airtime']))) > int(re.sub(r'[^0-9]', '', str(time_now))[:4]): values['unaired'] = 'true'
-							else: return
+							if values['airtime']:
+								time_now = (self.date_time).strftime('%X')
+								if int(re.sub(r'[^0-9]', '', str(values['airtime']))) > int(re.sub(r'[^0-9]', '', str(time_now))[:4]): values['unaired'] = 'true'
+								else: return
+							else: pass
 						else: return
 					except:
 						from resources.lib.modules import log_utils
@@ -478,10 +480,12 @@ class Episodes:
 							values['unaired'] = 'true'
 							if not progress_showunaired: return
 						elif int(re.sub(r'[^0-9]', '', str(values['premiered']))) == int(re.sub(r'[^0-9]', '', str(self.today_date))):
-							time_now = (self.date_time).strftime('%X')
-							if int(re.sub(r'[^0-9]', '', str(values['airtime']))) > int(re.sub(r'[^0-9]', '', str(time_now))[:4]):
-								values['unaired'] = 'true'
-								if not progress_showunaired: return
+							if values['airtime']:
+								time_now = (self.date_time).strftime('%X')
+								if int(re.sub(r'[^0-9]', '', str(values['airtime']))) > int(re.sub(r'[^0-9]', '', str(time_now))[:4]):
+									values['unaired'] = 'true'
+									if not progress_showunaired: return
+							else: pass
 					except:
 						from resources.lib.modules import log_utils
 						log_utils.error()
