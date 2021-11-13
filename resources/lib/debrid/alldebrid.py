@@ -20,7 +20,7 @@ base_url = 'https://api.alldebrid.com/v4/'
 user_agent = 'Venom%20for%20Kodi'
 ad_icon = control.joinPath(control.artPath(), 'alldebrid.png')
 addonFanart = control.addonFanart()
-
+invalid_extensions = ('.rar', '.zip', '.iso', '.part', '.png', '.jpg', '.bmp', '.gif', '.txt', '.srt', '.nfo')
 
 class AllDebrid:
 	name = "AllDebrid"
@@ -286,6 +286,7 @@ class AllDebrid:
 		folder_str, deleteMenu = control.lang(40046).upper(), control.lang(40050)
 		cloud_dict = self.user_cloud()['magnets']
 		cloud_dict = [i for i in cloud_dict if i['statusCode'] == 4]
+
 		for count, item in enumerate(cloud_dict, 1):
 			try:
 				cm = []
@@ -319,7 +320,22 @@ class AllDebrid:
 				cm = []
 				url_link = item['link']
 				name = control.strip_non_ascii_and_unprintable(item['filename'])
-				if any(value in name for value in ['.rar', '.zip', '.iso', '.part', '.png', '.jpg', '.bmp', '.gif', '.txt']): continue
+				if name.lower().endswith(invalid_extensions): continue
+
+				if not name.lower().endswith(tuple(extensions)):
+					files = item['files']
+					entry = files[0].get('e')
+					name = entry[0].get('n') if isinstance(entry, list) else entry.get('n')
+					def entry_loop(entry):
+						entry = entry.get('e')
+						name = entry[0].get('n') if isinstance(entry, list) else entry.get('n')
+						if not name.lower().endswith(tuple(extensions)):
+							return entry_loop(entry)
+						else: return control.strip_non_ascii_and_unprintable(name)
+					if not name.lower().endswith(tuple(extensions)):
+						name = entry_loop(entry)
+
+				# log_utils.log('name=%s' % name)
 				size = item['size']
 				display_size = float(int(size)) / 1073741824
 				label = '%02d | [B]%s[/B] | %.2f GB | [I]%s [/I]' % (count, file_str, display_size, name)
@@ -346,13 +362,24 @@ class AllDebrid:
 			extras_filtering_list = extras_filter()
 			transfer_id = self.create_transfer(magnet_url)
 			transfer_info = self.list_transfer(transfer_id)
-			valid_results = [i for i in transfer_info.get('links') if any(i.get('filename').lower().endswith(x) for x in extensions) and not i.get('link', '') == '']
-			if len(valid_results) == 0: return
+			# valid_results = [i for i in transfer_info.get('links') if any(i.get('filename').lower().endswith(x) for x in extensions) and not i.get('link', '') == ''] #.m2ts file extension is not in "filename" so this fails
+			valid_results = [i for i in transfer_info.get('links') if not any(i.get('filename').lower().endswith(x) for x in invalid_extensions) and not i.get('link', '') == '']
+
+			if len(valid_results) == 0:
+				failed_reason = 'No valid video extension found'
+				raise Exception()
+
 			if season:
 				for item in valid_results:
+					if '.m2ts' in str(item.get('files')):
+						log_utils.log('AllDebrid: Can not resolve .m2ts season disk episode', level=log_utils.LOGDEBUG)
+						failed_reason = '.m2ts season disk incapable of determining episode'
+						continue
 					if seas_ep_filter(season, episode, item['filename']):
 						correct_files.append(item)
-					if len(correct_files) == 0: continue
+					if len(correct_files) == 0:
+						failed_reason = 'no matching episode found'
+						continue
 					episode_title = re.sub(r'[^A-Za-z0-9-]+', '.', ep_title.replace('\'', '')).lower()
 					for i in correct_files:
 						compare_link = seas_ep_filter(season, episode, i['filename'], split=True)
@@ -362,14 +389,18 @@ class AllDebrid:
 							break
 			else:
 				media_id = max(valid_results, key=lambda x: x.get('size')).get('link', None)
+				# log_utils.log('media_id=%s' % media_id)
 			if not self.store_to_cloud: self.delete_transfer(transfer_id)
+			if not media_id:
+				log_utils.log('AllDebrid: FAILED TO RESOLVE MAGNET %s : (%s)' % (magnet_url, failed_reason), __name__, log_utils.LOGWARNING)
+				return None
 			file_url = self.unrestrict_link(media_id)
 			if not file_url:
-				log_utils.log('AllDebrid: FAILED TO RESOLVE MAGNET %s : ' % magnet_url, __name__, log_utils.LOGWARNING)
+				log_utils.log('AllDebrid: FAILED TO UNRESTRICT MAGNET %s : ' % magnet_url, __name__, log_utils.LOGWARNING)
 			return file_url
 		except:
-			log_utils.error()
-			log_utils.error('AllDebrid Error RESOLVE MAGNET %s : ' % magnet_url)
+			if failed_reason != 'Unknown': log_utils.log('AllDebrid: Error RESOLVE MAGNET %s : (%s)' % (magnet_url, failed_reason))
+			else: log_utils.error('AllDebrid: Error RESOLVE MAGNET %s : ' % magnet_url)
 			if transfer_id: self.delete_transfer(transfer_id)
 			return None
 

@@ -3,7 +3,6 @@
 	Venom Add-on
 """
 
-from json import loads as jsloads
 import re
 from resources.lib.modules import cleantitle
 
@@ -20,14 +19,12 @@ def aliases_to_array(aliases, filter=None):
 		return []
 
 def cloud_check_title(title, aliases, release_title):
-	try: aliases = aliases_to_array(jsloads(aliases))
-	except: aliases = None
+	aliases = aliases_to_array(aliases)
 	title_list = []
 	if aliases:
 		for item in aliases:
 			try:
 				alias = item.replace('!', '').replace('(', '').replace(')', '').replace('&', 'and')
-				# alias = re.sub(r'[^A-Za-z0-9\s\.-]+', '', alias)
 				if alias in title_list: continue
 				title_list.append(alias)
 			except:
@@ -36,9 +33,16 @@ def cloud_check_title(title, aliases, release_title):
 	try:
 		match = True
 		title = title.replace('!', '').replace('(', '').replace(')', '').replace('&', 'and')
-		# title = re.sub(r'[^A-Za-z0-9\s\.-]+', '', title)
 		title_list.append(title)
 		release_title = release_title_format(release_title).replace('!', '').replace('(', '').replace(')', '').replace('&', 'and') # converts to .lower()
+		release_title = re.split(r'(?:19|20)[0-9]{2}', release_title)[0] # split by 4 digit year
+
+		filter = []
+		for i in title_list:
+			try: filter.append(i.encode('ascii').decode('ascii'))
+			except: pass
+		title_list = filter
+
 		if all(cleantitle.get(i) not in cleantitle.get(release_title) for i in title_list): match = False
 		return match
 	except:
@@ -68,4 +72,4 @@ def release_title_format(release_title):
 			return title
 
 def extras_filter():
-	return ['sample', 'extra', 'deleted', 'unused', 'footage', 'inside', 'blooper', 'making.of', 'feature', 'featurette', 'behind.the.scenes', 'trailer']
+	return ('sample', 'extra', 'deleted', 'unused', 'footage', 'inside', 'blooper', 'making.of', 'feature', 'featurette', 'behind.the.scenes', 'trailer')

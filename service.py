@@ -87,7 +87,7 @@ class AddonCheckUpdate:
 		try:
 			import re
 			import requests
-			repo_xml = requests.get('https://raw.githubusercontent.com/123Venom/zips/master/addons.xml')
+			repo_xml = requests.get('https://raw.githubusercontent.com/123Venom/repository.venom/main/leia/zips/addons.xml')
 			if not repo_xml.status_code == 200:
 				return control.log('[ plugin.video.venom ]  Could not connect to remote repo XML: status code = %s' % repo_xml.status_code, LOGNOTICE)
 			repo_version = re.findall(r'<addon id=\"plugin.video.venom\".+version=\"(\d*.\d*.\d*)\"', repo_xml.text)[0]

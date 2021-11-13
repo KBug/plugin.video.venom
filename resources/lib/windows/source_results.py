@@ -138,24 +138,10 @@ class SourceResultsXML(BaseDialog):
 					quality = item.get('quality', 'SD')
 					quality_icon = self.get_quality_iconPath(quality)
 					extra_info = item.get('info')
-					try:
-						size_label = extra_info.split('|', 1)[0]
-						if any(value in size_label for value in ['HEVC', '3D']): size_label = ''
-					except: size_label = ''
-
-					try: f = ' / '.join(['%s' % info.strip() for info in extra_info.split('|')])
-					except: f = ''
-					if 'name_info' in item: t = getFileType(name_info=item.get('name_info'))
-					else: t = getFileType(url=item.get('url'))
-					t = '%s /%s' % (f, t) if (f != '' and f != '0 ' and f != ' ') else t
-					if t == '': t = getFileType(url=item.get('url'))
-					extra_info = t
-
+					size_label = str(round(item.get('size', ''), 2)) + ' GB' if item.get('size') else 'NA'
 					listitem.setProperty('venom.source_dict', jsdumps([item]))
 					listitem.setProperty('venom.debrid', self.debrid_abv(item.get('debrid')))
 					listitem.setProperty('venom.provider', item.get('provider').upper())
-					if item.get('source') == 'Google Drive': item['source'] = 'direct'
-					if item.get('provider') == 'furk': item['source'] = 'direct'
 					listitem.setProperty('venom.source', item.get('source').upper())
 					listitem.setProperty('venom.seeders', str(item.get('seeders')))
 					listitem.setProperty('venom.hash', item.get('hash', 'N/A'))
@@ -164,8 +150,7 @@ class SourceResultsXML(BaseDialog):
 					listitem.setProperty('venom.quality_icon', quality_icon)
 					listitem.setProperty('venom.url', item.get('url'))
 					listitem.setProperty('venom.extra_info', extra_info)
-					if size_label: listitem.setProperty('venom.size_label', size_label)
-					else: listitem.setProperty('venom.size_label', 'NA')
+					listitem.setProperty('venom.size_label', size_label)
 					listitem.setProperty('venom.count', '%02d.)' % count)
 					yield listitem
 				except:
@@ -179,8 +164,8 @@ class SourceResultsXML(BaseDialog):
 			log_utils.error()
 
 	def set_properties(self):
+		if self.meta is None: return
 		try:
-			if self.meta is None: return
 			# self.setProperty('venom.mediatype', self.meta.get('mediatype', ''))
 			self.setProperty('venom.season', str(self.meta.get('season', '')))
 			if self.meta.get('season_poster'):	self.setProperty('venom.poster', self.meta.get('season_poster', ''))
@@ -189,16 +174,11 @@ class SourceResultsXML(BaseDialog):
 			# self.setProperty('venom.clearart', self.meta.get('clearart', ''))
 			self.setProperty('venom.clearlogo', self.meta.get('clearlogo', ''))
 			# title = self.meta.get('tvshowtitle') if self.meta.get('tvshowtitle') else self.meta.get('title')
-			# self.setProperty('venom.title', title)
+			# self.setProperty('venom.title', title) # was going to use this for missing clearlogo
 			self.setProperty('venom.plot', self.meta.get('plot', ''))
 			self.setProperty('venom.year', str(self.meta.get('year', '')))
-
 			new_date = tools.Time.convert(stringTime=str(self.meta.get('premiered', '')), formatInput='%Y-%m-%d', formatOutput='%m-%d-%Y', zoneFrom='utc', zoneTo='utc')
-			# new_date = new_date.lstrip('0')
-			# new_date = new_date.replace('-0', '-')
-			# self.setProperty('venom.premiered', str(self.meta.get('premiered', '')))
 			self.setProperty('venom.premiered', new_date)
-
 			if self.meta.get('mpaa'): self.setProperty('venom.mpaa', self.meta.get('mpaa'))
 			else: self.setProperty('venom.mpaa', 'NA ')
 			if self.meta.get('duration'):
