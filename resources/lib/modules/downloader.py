@@ -75,8 +75,7 @@ def download(name, image, url, meta_name=None):
 			ext = 'mp4'
 		dest = os.path.join(dest, transname + '.' + ext)
 		doDownload(url, dest, name, image, headers)
-	except:
-		log_utils.error()
+	except: log_utils.error()
 
 def getResponse(url, headers, size):
 	try:
@@ -156,7 +155,7 @@ def doDownload(url, dest, title, image, headers):
 					f.close()
 					log_utils.log('Download Complete: %s' % (dest), level=log_utils.LOGDEBUG)
 					return done(title, dest, True)
-		except:
+		except Exception as e:
 			log_utils.error('DOWNNLOADER EXCEPTION: ')
 			error = True
 			sleep = 10

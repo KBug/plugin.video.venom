@@ -4,7 +4,7 @@
 """
 
 from datetime import datetime, timedelta
-from json import dumps as jsdumps, loads as jsloads
+from json import dumps as jsdumps
 import re
 from threading import Thread
 from urllib.parse import quote_plus, urlencode, parse_qsl, urlparse, urlsplit
@@ -35,9 +35,8 @@ class TVshows:
 		self.highlight_color = control.getHighlightColor()
 		self.date_time = datetime.now()
 		self.today_date = (self.date_time).strftime('%Y-%m-%d')
-
-		self.tvdb_key = getSetting('tvdb.api.key')
 		self.imdb_user = getSetting('imdb.user').replace('ur', '')
+		self.tvdb_key = getSetting('tvdb.api.key')
 		self.user = str(self.imdb_user) + str(self.tvdb_key)
 
 		self.imdb_link = 'https://www.imdb.com'
@@ -110,8 +109,7 @@ class TVshows:
 					if trakt.getActivity() > cache.timeout(self.trakt_list, url, self.trakt_user):
 						self.list = cache.get(self.trakt_list, 0, url, self.trakt_user)
 					else: self.list = cache.get(self.trakt_list, 720, url, self.trakt_user)
-				except:
-					self.list = self.trakt_userList(url)
+				except: self.list = self.trakt_userList(url)
 				if idx: self.worker()
 				self.sort()
 			elif u in self.trakt_link and self.search_link in url:
@@ -165,7 +163,7 @@ class TVshows:
 		try:
 			try: url = getattr(self, url + '_link')
 			except: pass
-			self.list = cache.get(tvmaze.tvshows().tvmaze_list, 168, url)
+			self.list = cache.get(tvmaze.TVshows().tvmaze_list, 168, url)
 			# if idx: self.worker() ## TVMaze has it's own full list builder.
 			if self.list is None: self.list = []
 			if idx: self.tvshowDirectory(self.list)
@@ -200,8 +198,7 @@ class TVshows:
 		try:
 			if trakt.getProgressActivity() > cache.timeout(self.trakt_list, self.progress_link, self.trakt_user): raise Exception()
 			self.list = cache.get(self.trakt_list, 24, self.progress_link, self.trakt_user)
-		except:
-			self.list = cache.get(self.trakt_list, 0, self.progress_link, self.trakt_user)
+		except: self.list = cache.get(self.trakt_list, 0, self.progress_link, self.trakt_user)
 
 		for i in self.list:
 			imdb, tvdb = i.get('imdb'), i.get('tvdb')
@@ -329,8 +326,7 @@ class TVshows:
 	def search(self):
 		from resources.lib.menus import navigator
 		navigator.Navigator().addDirectoryItem(getLS(32603) % self.highlight_color, 'tvSearchnew', 'search.png', 'DefaultAddonsSearch.png', isFolder=False)
-		try: from sqlite3 import dbapi2 as database
-		except ImportError: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		try:
 			if not control.existsPath(control.dataPath): control.makeFile(control.dataPath)
 			dbcon = database.connect(control.searchFile)
@@ -358,8 +354,7 @@ class TVshows:
 		k.doModal()
 		q = k.getText() if k.isConfirmed() else None
 		if not q: return control.closeAll()
-		try: from sqlite3 import dbapi2 as database
-		except ImportError: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		try:
 			dbcon = database.connect(control.searchFile)
 			dbcur = dbcon.cursor()
@@ -496,8 +491,7 @@ class TVshows:
 			try:
 				if activity > cache.timeout(self.trakt_user_lists, self.traktlists_link, self.trakt_user): raise Exception()
 				lists += cache.get(self.trakt_user_lists, 720, self.traktlists_link, self.trakt_user)
-			except:
-				lists += cache.get(self.trakt_user_lists, 0, self.traktlists_link, self.trakt_user)
+			except: lists += cache.get(self.trakt_user_lists, 0, self.traktlists_link, self.trakt_user)
 			userlists += lists
 		except: pass
 		try:
@@ -721,8 +715,7 @@ class TVshows:
 
 	def trakt_public_list(self, url):
 		try:
-			result = trakt.getTrakt(url)
-			items = jsloads(result)
+			items = trakt.getTrakt(url).json()
 		except:
 			from resources.lib.modules import log_utils
 			log_utils.error()
@@ -783,8 +776,7 @@ class TVshows:
 				next = [i[0] for i in next if 'Next' in i[1]]
 			next = url.replace(urlparse(url).query, urlparse(next[0]).query)
 			next = client.replaceHTMLCodes(next)
-		except:
-			next = ''
+		except: next = ''
 		for item in items:
 			try:
 				title = client.replaceHTMLCodes(client.parseDOM(item, 'a')[1])

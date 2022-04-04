@@ -58,7 +58,7 @@ def release_title_format(release_title):
 		log_utils.error()
 		return release_title
 
-	def abbrev_title(self, title):
+	def abbrev_title(title):
 		try:
 			split_title = title.split(' ')
 			if len(split_title) == 1: return title

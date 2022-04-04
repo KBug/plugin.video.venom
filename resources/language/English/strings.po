@@ -1362,7 +1362,7 @@ msgid "Preferred %s subtitle available in stream and has been set"
 msgstr ""
 
 msgctxt "#32395"
-msgid ""
+msgid "No matching Subtitle language found"
 msgstr ""
 
 msgctxt "#32396"

@@ -1362,8 +1362,8 @@ msgid "Preferred %s subtitle available in stream and has been set"
 msgstr "Voorkeur %s ondertitel beschikbaar in stream en is ingesteld"
 
 msgctxt "#32395"
-msgid ""
-msgstr ""
+msgid "No matching Subtitle language found"
+msgstr "Geen overeenkomende ondertiteltaal gevonden""
 
 msgctxt "#32396"
 msgid ""

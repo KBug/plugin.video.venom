@@ -8,7 +8,11 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from resources.lib.modules.control import setting as getSetting, apiLanguage, notification
 
-base_url = "http://webservice.fanart.tv/v3/%s/%s"
+base_url = 'https://webservice.fanart.tv/v3/%s/%s'
+session = requests.Session()
+retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+session.mount('https://webservice.fanart.tv', HTTPAdapter(max_retries=retries, pool_maxsize=100))
+
 
 class FanartTv:
 	def __init__(self):
@@ -16,19 +20,13 @@ class FanartTv:
 		client_key = getSetting('fanart_tv.api_key')
 		if not client_key: client_key = 'cf0ebcc2f7b824bd04cf3a318f15c17d'
 		self.headers.update({'client-key': client_key})
-		self.session = requests.Session()
-		retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
-		self.session.mount('https://', HTTPAdapter(max_retries=retries))
 		self.lang = apiLanguage()['trakt']
-
-	def __del__(self):
-		self.session.close()
 
 	def get_request(self, url):
 		try:
-			try: result = self.session.get(url, headers=self.headers, timeout=5)
+			try: result = session.get(url, headers=self.headers, timeout=10)
 			except requests.exceptions.SSLError:
-				result = self.session.get(url, headers=self.headers, verify=False)
+				result = session.get(url, headers=self.headers, verify=False)
 		except requests.exceptions.ConnectionError:
 			notification(message='FANART.TV Temporary Server Problems')
 			from resources.lib.modules import log_utils
@@ -180,7 +178,7 @@ class FanartTv:
 		if not tvdb or not season: return None
 		try:
 			from resources.lib.database import fanarttv_cache
-			extended_art = fanarttv_cache.get(FanartTv().get_tvshow_art, 336, tvdb) # must use class and not "self." to pull matching db entry
+			extended_art = fanarttv_cache.get(self.get_tvshow_art, 336, tvdb)
 			if not extended_art: return None
 			season_posters = extended_art.get('season_posters', {})
 			if season_posters:

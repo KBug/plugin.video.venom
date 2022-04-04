@@ -127,8 +127,7 @@ def view_LogFile(name):
 		windows = TextViewerXML('textviewer.xml', addonPath('plugin.video.venom'), heading=heading, text=text)
 		windows.run()
 		del windows
-	except:
-		error()
+	except: error()
 
 def upload_LogFile(name):
 	from resources.lib.modules.control import notification

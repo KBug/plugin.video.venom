@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# created by Venom (updated 2-15-2022)
+# created by Venom (updated 4-03-2022)
 """
 	Venom Add-on
 """
@@ -7,7 +7,7 @@
 import re
 from resources.lib.cloud_scrapers import cloud_utils
 from resources.lib.database import cache
-from resources.lib.debrid import alldebrid
+from resources.lib.debrid.alldebrid import AllDebrid
 from resources.lib.modules.control import setting as getSetting
 # from resources.lib.modules.source_utils import supported_video_extensions
 from fenomscrapers.modules import source_utils as fs_utils
@@ -36,7 +36,7 @@ class source:
 			self.episode = str(data['episode']) if 'tvshowtitle' in data else None
 			query_list = self.episode_query_list() if 'tvshowtitle' in data else self.year_query_list()
 			# log_utils.log('query_list = %s' % query_list)
-			try: cloud_folders = alldebrid.AllDebrid().user_cloud()['magnets']
+			try: cloud_folders = AllDebrid().user_cloud()['magnets']
 			except: return sources
 			if not cloud_folders: return sources
 			cloud_folders = [i for i in cloud_folders if i['statusCode'] == 4]
@@ -69,7 +69,6 @@ class source:
 					if name.lower().endswith(invalid_extensions): continue
 					rt = cloud_utils.release_title_format(name)
 					if any(value in rt for value in extras_filter): continue
-
 					if '.m2ts' in str(file.get('files')):
 						if ignoreM2ts: continue
 						if name in str(sources): continue
@@ -88,7 +87,7 @@ class source:
 									if name != folder_name:
 										if all(not bool(re.search(i, rt)) for i in episode_list): continue
 									else:
-										link = cache.get(alldebrid.AllDebrid().unrestrict_link, 168, file['link'], True)
+										link = cache.get(AllDebrid().unrestrict_link, 168, file['link'], True)
 										name = link.get('filename', '')
 										if name.lower().endswith(invalid_extensions): continue
 										rt = cloud_utils.release_title_format(name)
@@ -96,9 +95,11 @@ class source:
 										if all(not bool(re.search(i, rt)) for i in query_list): continue
 										file.update({'size': link.get('filesize')})
 								else: continue
-
 							else:
 								if all(not bool(re.search(i, path)) for i in query_list): continue
+								if rt.startswith('.etrg.'): continue # some torrents they included an EXTRATORRENT site promo video
+								from resources.lib.modules import log_utils
+								log_utils.log('rt = %s' % rt, __name__)
 								name = folder.get('filename', '')
 						link = file.get('link', '')
 						size = file.get('size', '')
@@ -123,7 +124,7 @@ class source:
 		return sources
 
 	def year_query_list(self):
-		return [str(self.year), str(int(self.year)+1), str(int(self.year)-1)]
+		return [str(self.year), str(int(self.year)+1), str(int(self.year)-1)] if self.year else []
 
 	def episode_query_list(self):
 		return [
@@ -133,6 +134,8 @@ class source:
 				'[.-]%02dx%02d[.-]' % (int(self.season), int(self.episode)),
 				's%de%02d' % (int(self.season), int(self.episode)),
 				's%02de%02d' % (int(self.season), int(self.episode)),
+				's%dep%02d' % (int(self.season), int(self.episode)),
+				's%02dep%02d' % (int(self.season), int(self.episode)),
 				'season%depisode%d' % (int(self.season), int(self.episode)),
 				'season%depisode%02d' % (int(self.season), int(self.episode)),
 				'season%02depisode%02d' % (int(self.season), int(self.episode))]
@@ -155,7 +158,7 @@ class source:
 
 	def resolve(self, url):
 		try:
-			url = cache.get(alldebrid.AllDebrid().unrestrict_link, 48, url)
+			url = cache.get(AllDebrid().unrestrict_link, 48, url)
 			return url
 		except:
 			from resources.lib.modules import log_utils

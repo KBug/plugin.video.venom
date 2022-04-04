@@ -11,8 +11,7 @@ from sys import exit as sysexit
 from threading import Thread
 from time import time
 from urllib.parse import unquote
-try: from sqlite3 import dbapi2 as database
-except ImportError: from pysqlite2 import dbapi2 as database
+from sqlite3 import dbapi2 as database
 from resources.lib.database import metacache, providerscache
 from resources.lib.modules import cleandate
 from resources.lib.modules import control
@@ -176,8 +175,7 @@ class Sources:
 			self.poster = meta.get('poster') if meta else ''
 			self.fanart = meta.get('fanart') if meta else ''
 			self.meta = meta
-		except:
-			log_utils.error('Error sourceSelect(): ')
+		except: log_utils.error('Error sourceSelect(): ')
 
 		def checkLibMeta(): # check Kodi db for meta for library playback.
 			def cleanLibArt(art):
@@ -276,8 +274,7 @@ class Sources:
 				sources_next = items[source_index+1:next_end]
 				sources_prev = [] if next_end < source_len else items[0:41-(source_len-source_index)]
 				items = [i for i in chosen_source + sources_next + sources_prev]
-			except:
-				log_utils.error()
+			except: log_utils.error()
 			header = homeWindow.getProperty(self.labelProperty) + ': Resolving...'
 			progressDialog = control.progressDialog if getSetting('progress.dialog') == '0' else control.progressDialogBG
 			progressDialog.create(header, '')
@@ -317,14 +314,12 @@ class Sources:
 					from resources.lib.modules import player
 					player.Player().play_source(title, self.year, self.season, self.episode, self.imdb, self.tmdb, self.tvdb, self.url, meta)
 					return self.url
-				except:
-					log_utils.error()
+				except: log_utils.error()
 			try: progressDialog.close()
 			except: pass
 			del progressDialog
 			self.errorForSources()
-		except:
-			log_utils.error('Error playItem: ')
+		except: log_utils.error('Error playItem: ')
 
 	def getSources(self, title, year, imdb, tmdb, tvdb, season, episode, tvshowtitle, premiered, meta=None, preScrape=False):
 		if preScrape:
@@ -375,8 +370,7 @@ class Sources:
 				threads.append(Thread(target=self.getEpisodeSource, args=(imdb, season, episode, data, i[0], i[1], pack), name=name))
 			[i.start() for i in threads]
 			end_time = time() + timeout
-		except:
-			return log_utils.error()
+		except: return log_utils.error()
 		while True:
 			try:
 				if control.monitor.abortRequested(): return sysexit()
@@ -388,8 +382,7 @@ class Sources:
 					log_utils.error()
 					break
 				control.sleep(100)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		del threads[:] # Make sure any remaining providers are stopped.
 		self.sources.extend(self.scraper_sources)
 		self.tvshowtitle = tvshowtitle
@@ -427,8 +420,7 @@ class Sources:
 					homeWindow.clearProperty(self.titleProperty)
 					homeWindow.setProperty(self.titleProperty, title)
 					log_utils.log('Custom query scrape ran using: %s' % p_label, level=log_utils.LOGDEBUG)
-				except:
-					log_utils.error()
+				except: log_utils.error()
 			progressDialog = control.progressDialog if getSetting('progress.dialog') == '0' else control.progressDialogBG
 			header = homeWindow.getProperty(self.labelProperty) + ': Scraping...'
 			progressDialog.create(header, '')
@@ -554,8 +546,7 @@ class Sources:
 					log_utils.error()
 					break
 				control.sleep(25)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		try: progressDialog.close()
 		except: pass
 		del progressDialog
@@ -600,8 +591,7 @@ class Sources:
 							log_utils.log('player_hasVideo = %s : skipping setting preResolved_nextUrl' % player_hasVideo, level=log_utils.LOGWARNING)
 						break
 				except: pass
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		control.sleep(200)
 
 	def prepareSources(self):
@@ -612,8 +602,7 @@ class Sources:
 			dbcur.execute('''CREATE TABLE IF NOT EXISTS rel_src (source TEXT, imdb_id TEXT, season TEXT, episode TEXT, hosts TEXT, added TEXT, UNIQUE(source, imdb_id, season, episode));''')
 			dbcur.execute('''CREATE TABLE IF NOT EXISTS rel_aliases (title TEXT, aliases TEXT, UNIQUE(title));''')
 			dbcur.connection.commit()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		finally:
 			dbcur.close() ; dbcon.close()
 
@@ -631,8 +620,7 @@ class Sources:
 			try:
 				dbcur.execute('''DELETE FROM rel_src WHERE (source=? AND imdb_id='' AND season='' AND episode='')''', (source,))
 				dbcur.connection.commit()
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		try:
 			sources = []
 			db_movie = dbcur.execute('''SELECT * FROM rel_src WHERE (source=? AND imdb_id=? AND season='' AND episode='')''', (source, imdb)).fetchone()
@@ -642,8 +630,7 @@ class Sources:
 				if db_movie_valid:
 					sources = eval(db_movie[4])
 					return self.scraper_sources.extend(sources)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		try:
 			sources = []
 			sources = call().sources(data, self.hostprDict)
@@ -652,8 +639,7 @@ class Sources:
 				dbcur.execute('''INSERT OR REPLACE INTO rel_aliases Values (?, ?)''', (data.get('title', ''), repr(data.get('aliases', ''))))
 				dbcur.execute('''INSERT OR REPLACE INTO rel_src Values (?, ?, ?, ?, ?, ?)''', (source, imdb, '', '', repr(sources), datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")))
 				dbcur.connection.commit()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def getEpisodeSource(self, imdb, season, episode, data, source, call, pack):
 		try:
@@ -671,8 +657,7 @@ class Sources:
 				dbcur.execute('''DELETE FROM rel_src WHERE (source=? AND imdb_id='' AND season=? AND episode='')''', (source, season))
 				dbcur.execute('''DELETE FROM rel_src WHERE (source=? AND imdb_id='' AND season='' AND episode='')''', (source, ))
 				dbcur.connection.commit()
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		if not pack: # singleEpisodes db check
 			try:
 				db_singleEpisodes = dbcur.execute('''SELECT * FROM rel_src WHERE (source=? AND imdb_id=? AND season=? AND episode=?)''', (source, imdb, season, episode)).fetchone()
@@ -682,8 +667,7 @@ class Sources:
 					if db_singleEpisodes_valid:
 						sources = eval(db_singleEpisodes[4])
 						return self.scraper_sources.extend(sources)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		elif pack == 'season': # seasonPacks db check
 			try:
 				db_seasonPacks = dbcur.execute('''SELECT * FROM rel_src WHERE (source=? AND imdb_id=? AND season=? AND episode='')''', (source, imdb, season)).fetchone()
@@ -694,8 +678,7 @@ class Sources:
 						sources = eval(db_seasonPacks[4])
 						sources = [i for i in sources if not 'episode_start' in i or i['episode_start'] <= int(episode) <= i['episode_end']] # filter out range items that do not apply to current episode for return
 						return self.scraper_sources.extend(sources)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		elif pack == 'show': # showPacks db check
 			try:
 				db_showPacks = dbcur.execute('''SELECT * FROM rel_src WHERE (source=? AND imdb_id=? AND season='' AND episode='')''', (source, imdb)).fetchone()
@@ -706,14 +689,12 @@ class Sources:
 						sources = eval(db_showPacks[4])
 						sources = [i for i in sources if i.get('last_season') >= int(season)] # filter out range items that do not apply to current season for return
 						return self.scraper_sources.extend(sources)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 
 		try: #dummy write or threads wait till return from scrapers...write for each is needed
 			dbcur.execute('''INSERT OR REPLACE INTO rel_src Values (?, ?, ?, ?, ?, ?)''', ('dummy write', '', '', '', '', ''))
 			dbcur.connection.commit()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 		if not pack: # singleEpisodes scraper call
 			try:
@@ -724,8 +705,7 @@ class Sources:
 					dbcur.connection.commit()
 					return self.scraper_sources.extend(sources)
 				return
-			except:
-				return log_utils.error()
+			except: return log_utils.error()
 		elif pack == 'season': # seasonPacks scraper call
 			try:
 				sources = []
@@ -736,8 +716,7 @@ class Sources:
 					sources = [i for i in sources if not 'episode_start' in i or i['episode_start'] <= int(episode) <= i['episode_end']] # filter out range items that do not apply to current episode for return
 					return self.scraper_sources.extend(sources)
 				return
-			except:
-				return log_utils.error()
+			except: return log_utils.error()
 		elif pack == 'show': # showPacks scraper call
 			try:
 				sources = []
@@ -747,12 +726,10 @@ class Sources:
 					dbcur.connection.commit()
 					sources = [i for i in sources if i.get('last_season') >= int(season)] # filter out range items that do not apply to current season for return
 					return self.scraper_sources.extend(sources)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 
 	def sourcesFilter(self):
 		if not self.isPrescrape: control.busy()
-		quality = getSetting('hosts.quality') or '0'
 		if getSetting('remove.duplicates') == 'true': self.sources = self.filter_dupes()
 		if self.mediatype == 'movie':
 			if getSetting('source.enable.msizelimit') == 'true':
@@ -767,7 +744,7 @@ class Sources:
 					from resources.lib.modules.source_utils import tvshow_reboots
 					reboots = tvshow_reboots()
 					if self.tvshowtitle in reboots and reboots.get(self.tvshowtitle) == self.year:
-						log_utils.log('tvshowtitle is a REBOOT, filtering for year match', level= log_utils.LOGDEBUG)
+						log_utils.log('tvshowtitle(%s) is a REBOOT, filtering for year match per enabled setting' % self.tvshowtitle, level= log_utils.LOGDEBUG)
 						self.sources = [i for i in self.sources if self.year in i.get('name')]
 				except: log_utils.error()
 			if getSetting('source.enable.esizelimit') == 'true':
@@ -813,10 +790,8 @@ class Sources:
 				cached = None
 				if deepcopy_sources: cached = function(deepcopy_sources, hashList)
 				if cached: self.filter += [dict(list(i.items()) + [('debrid', debrid_name)]) for i in cached] # this makes a new instance so no need for deepcopy beyond the one time done now
-				if valid_hoster:
-					self.filter += [dict(list(i.items()) + [('debrid', debrid_name)]) for i in self.sources if i['source'] in valid_hoster and 'magnet:' not in i['url']]
-			except:
-				log_utils.error()
+				if valid_hoster: self.filter += [dict(list(i.items()) + [('debrid', debrid_name)]) for i in self.sources if i['source'] in valid_hoster and 'magnet:' not in i['url']]
+			except: log_utils.error()
 		for d in self.debrid_resolvers:
 			if d.name == 'Real-Debrid' and getSetting('realdebrid.enable') == 'true':
 				try:
@@ -913,13 +888,12 @@ class Sources:
 						remove(sublist)
 						if log_dupes: log_utils.log('Removing %s - %s (DUPLICATE LINK) ALREADY IN :: %s' % (sublist['source'], i['url'], i['provider']), level=log_utils.LOGDEBUG)
 						break
-				except:
-					log_utils.error('Error filter_dupes: ')
+				except: log_utils.error('Error filter_dupes: ')
 			if not larger: append(i) # sublist['name'] len() was larger, or "torrentio" so do not append
-		header = homeWindow.getProperty(self.labelProperty)
+		item_title = homeWindow.getProperty(self.labelProperty)
 		if self.mediatype == 'movie' or (self.mediatype == 'episode' and not self.enable_playnext):
-			control.notification(title=header, message='Removed %s duplicate sources from list' % (len(self.sources) - len(filter)))
-		log_utils.log('Removed %s duplicate sources for (%s) from list' % (len(self.sources) - len(filter), homeWindow.getProperty(self.labelProperty)), level=log_utils.LOGDEBUG)
+			control.notification(title=item_title, message='Removed %s duplicate sources from list' % (len(self.sources) - len(filter)))
+		log_utils.log('Removed %s duplicate sources for (%s) from list' % (len(self.sources) - len(filter), item_title), level=log_utils.LOGDEBUG)
 		return filter
 
 	def sourcesAutoPlay(self, items):
@@ -948,8 +922,7 @@ class Sources:
 						log_utils.log('Playing url from (sourcesAutoPlay()): %s' % url, level=log_utils.LOGDEBUG)
 						break
 				except: pass
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		try: progressDialog.close()
 		except: pass
 		del progressDialog
@@ -960,8 +933,7 @@ class Sources:
 			url = item['url']
 			self.url = None
 			debrid_provider = item['debrid'] if item.get('debrid') else ''
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		if 'magnet:' in url:
 			if not 'uncached' in item['source']:
 				try:
@@ -1085,16 +1057,14 @@ class Sources:
 				from resources.lib.modules.source_utils import copy2clip
 				copy2clip(list[select - 1][1])
 			return
-		except:
-			log_utils.error('Error sourceInfo: ' )
+		except: log_utils.error('Error sourceInfo: ' )
 
 	def alterSources(self, url, meta):
 		try:
 			if getSetting('play.mode') == '1' or (self.enable_playnext and 'episode' in meta): url += '&select=0'
 			else: url += '&select=1'
 			control.execute('PlayMedia(%s)' % url)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def errorForSources(self):
 		try:
@@ -1103,8 +1073,7 @@ class Sources:
 			if self.url == 'close://': control.notification(message=32400)
 			else: control.notification(message=32401)
 			control.cancelPlayback()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def getAliasTitles(self, imdb, content):
 		try:
@@ -1165,8 +1134,7 @@ class Sources:
 		seasoncount, counts = None, None
 		try:
 			if self.meta: seasoncount, counts = self.meta.get('seasoncount', None), self.meta.get('counts', None)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		if not seasoncount or not counts: # check metacache, 2nd fallback
 			try:
 				imdb_user = getSetting('imdb.user').replace('ur', '')
@@ -1179,8 +1147,7 @@ class Sources:
 				meta2 = metacache.fetch(ids, meta_lang, user)[0]
 				if not seasoncount: seasoncount = meta2.get('seasoncount', None)
 				if not counts: counts = meta2.get('counts', None)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		if not seasoncount or not counts: # make request, 3rd fallback
 			try:
 				if self.meta: season = self.meta.get('season')
@@ -1217,16 +1184,14 @@ class Sources:
 					i.update({'size': float_size, 'info': info})
 				else:
 					continue
-			except:
-				log_utils.error()
-				continue
+			except: log_utils.error()
 		return self.sources
 
 	def ad_cache_chk_list(self, torrent_List, hashList):
 		if len(torrent_List) == 0: return
 		try:
-			from resources.lib.debrid.alldebrid import AllDebrid as debrid_function
-			cached = debrid_function().check_cache(hashList)
+			from resources.lib.debrid.alldebrid import AllDebrid
+			cached = AllDebrid().check_cache(hashList)
 			if not cached: return None
 			cached = cached['magnets']
 			count = 0
@@ -1242,14 +1207,13 @@ class Sources:
 					else: i.update({'source': 'cached torrent'})
 				count += 1
 			return torrent_List
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def pm_cache_chk_list(self, torrent_List, hashList):
 		if len(torrent_List) == 0: return
 		try:
-			from resources.lib.debrid.premiumize import Premiumize as debrid_function
-			cached = debrid_function().check_cache_list(hashList)
+			from resources.lib.debrid.premiumize import Premiumize
+			cached = Premiumize().check_cache_list(hashList)
 			if not cached: return None
 			count = 0
 			for i in torrent_List:
@@ -1261,21 +1225,13 @@ class Sources:
 					else: i.update({'source': 'cached torrent'})
 				count += 1
 			return torrent_List
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def rd_cache_chk_list(self, torrent_List, hashList):
 		if len(torrent_List) == 0: return
-		def base32_to_hex(hash):
-			from base64 import b32decode
-			hex = b32decode(hash).hex()
-			log_utils.log('RD : base32 hash: %s converted to hex 40: %s' % (hash, hex), __name__, log_utils.LOGDEBUG)
-			return hex
 		try:
-			from resources.lib.debrid.realdebrid import RealDebrid as debrid_function
-# RD can not handle BASE32 encoded hashes, hex 40 only (AD and PM convert). EZTV scraper now converts and is only site that returns base32 hashes
-			# hashList = [i['hash'] if len(i['hash']) == 40 else base32_to_hex(i['hash']) for i in torrent_List] 
-			cached = debrid_function().check_cache(hashList)
+			from resources.lib.debrid.realdebrid import RealDebrid
+			cached = RealDebrid().check_cache(hashList)
 			if not cached: return None
 			for i in torrent_List:
 				if 'rd' not in cached.get(i['hash'].lower(), {}): # i['hash'] could still be base32 here and not found due to conversion above
@@ -1289,8 +1245,7 @@ class Sources:
 					if 'package' in i: i.update({'source': 'uncached (pack) torrent'})
 					else: i.update({'source': 'uncached torrent'})
 			return torrent_List
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def clr_item_providers(self, title, year, imdb, tmdb, tvdb, season, episode, tvshowtitle, premiered):
 		providerscache.remove(self.getSources, title, year, imdb, tmdb, tvdb, season, episode, tvshowtitle, premiered) # function cache removal of selected item ONLY
@@ -1301,10 +1256,8 @@ class Sources:
 			if dbcur.fetchone()[0] == 1:
 				dbcur.execute('''DELETE FROM rel_src WHERE imdb_id=?''', (imdb,)) # DEL the "rel_src" list of cached links
 				dbcur.connection.commit()
-		except:
-			log_utils.error()
-		finally:
-			dbcur.close() ; dbcon.close()
+		except: log_utils.error()
+		finally: dbcur.close() ; dbcon.close()
 
 	def imdb_meta_chk(self, imdb, title, year):
 		try:
@@ -1313,7 +1266,7 @@ class Sources:
 			result = _basic_request('https://v2.sg.media-imdb.com/suggestion/t/{}.json'.format(imdb))
 			if not result: return title, year
 			result = jsloads(result)['d'][0]
-			year_ck = str(result['y'])
+			year_ck = str(result.get('y', ''))
 			title_ck = self.getTitle(result['l'])
 			if not year_ck or not title_ck: return title, year
 			if self.mediatype == 'movie':
@@ -1352,8 +1305,7 @@ class Sources:
 				meta2 = metacache.fetch(ids, meta_lang, user)[0]
 				if not total_seasons: total_seasons = meta2.get('total_seasons', None)
 				if season_isAiring is None: season_isAiring = meta2.get('season_isAiring', None)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		if not total_seasons: # make request, 3rd fallback
 			try:
 				from resources.lib.modules.trakt import getSeasons
@@ -1363,15 +1315,13 @@ class Sources:
 					season_special = True if 0 in total_seasons else False
 					total_seasons = len(total_seasons)
 					if season_special: total_seasons = total_seasons - 1
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		if season_isAiring is None:
 			try:
 				from resources.lib.indexers import tmdb as tmdb_indexer
 				season_isAiring = tmdb_indexer.TVshows().get_season_isAiring(tmdb, season)
 				if not season_isAiring: season_isAiring = 'false'
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		return total_seasons, season_isAiring
 
 	def sort_byQuality(self, source_list):

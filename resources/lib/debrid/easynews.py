@@ -5,7 +5,6 @@
 
 
 from base64 import b64encode
-from json import dumps as jsdumps, loads as jsloads
 import re
 import requests
 from urllib.parse import quote, quote_plus
@@ -60,8 +59,7 @@ class EasyNews:
 	def search(self):
 		from resources.lib.menus import navigator
 		navigator.Navigator().addDirectoryItem(getLS(32603) % self.highlight_color, 'en_Searchnew', 'search.png', 'DefaultAddonsSearch.png', isFolder=False)
-		try: from sqlite3 import dbapi2 as database
-		except ImportError: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		try:
 			if not control.existsPath(control.dataPath): control.makeFile(control.dataPath)
 			dbcon = database.connect(control.searchFile)
@@ -90,8 +88,7 @@ class EasyNews:
 		k.doModal()
 		query = k.getText() if k.isConfirmed() else None
 		if not query: return control.closeAll()
-		try: from sqlite3 import dbapi2 as database
-		except ImportError: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		try:
 			dbcon = database.connect(control.searchFile)
 			dbcur = dbcon.cursor()

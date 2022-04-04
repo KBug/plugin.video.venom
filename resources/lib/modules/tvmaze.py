@@ -6,6 +6,7 @@
 from json import loads as jsloads
 from urllib.parse import urlencode
 from resources.lib.database import cache
+from resources.lib.modules.control import setting as getSetting
 from resources.lib.modules import client
 from resources.lib.modules import log_utils
 
@@ -13,7 +14,7 @@ from resources.lib.modules import log_utils
 class tvMaze:
 	def __init__(self, show_id=None):
 		self.api_url = 'https://api.tvmaze.com/%s%s'
-		self.tvdb_apiKey = control.setting('tvdb.api.key')
+		self.tvdb_apiKey = getSetting('tvdb.api.key')
 		self.show_id = show_id
 
 	def showID(self, show_id=None):
@@ -36,7 +37,7 @@ class tvMaze:
 	def showLookup(self, type, id):
 		try:
 			result = self.request('lookup/shows', {type: id})
-			if ('id' in result): self.show_id = result['id']
+			if 'id' in result: self.show_id = result['id']
 			return result
 		except:
 			log_utils.error()
@@ -89,5 +90,4 @@ class tvMaze:
 			r = client.request(url, error=True)
 			title = client.replaceHTMLCodes(client.parseDOM(r, 'SeriesName')[0])
 			return title
-		except:
-			log_utils.error()
+		except: log_utils.error()

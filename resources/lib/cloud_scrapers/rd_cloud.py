@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-# created by Venom (updated 11-17-2021)
+# created by Venom (updated 3-29-2022)
 """
 	Venom Add-on
 """
 
 import re
 from resources.lib.cloud_scrapers import cloud_utils
-from resources.lib.debrid import realdebrid
+from resources.lib.database import cache
+from resources.lib.debrid.realdebrid import RealDebrid
 from resources.lib.modules.control import setting as getSetting
 from resources.lib.modules.source_utils import supported_video_extensions
 from fenomscrapers.modules import source_utils as fs_utils
@@ -34,7 +35,7 @@ class source:
 			self.episode = str(data['episode']) if 'tvshowtitle' in data else None
 			query_list = self.episode_query_list() if 'tvshowtitle' in data else self.year_query_list()
 			# log_utils.log('query_list = %s' % query_list)
-			cloud_folders = realdebrid.RealDebrid().user_torrents()
+			cloud_folders = RealDebrid().user_torrents()
 			if not cloud_folders: return sources
 			cloud_folders = [i for i in cloud_folders if i['status'] == 'downloaded']
 			if not cloud_folders: return sources
@@ -51,7 +52,7 @@ class source:
 				folder_name = folder.get('filename', '')
 				if not cloud_utils.cloud_check_title(title, aliases, folder_name): continue
 				id = folder.get('id', '')
-				torrent_info = realdebrid.RealDebrid().torrent_info(id)
+				torrent_info = RealDebrid().torrent_info(id)
 				folder_files = torrent_info['files']
 				folder_files = [i for i in folder_files if i['selected'] == 1]
 			except:
@@ -65,7 +66,6 @@ class source:
 					rt = cloud_utils.release_title_format(name)
 					if not name.lower().endswith(tuple(supported_video_extensions())): continue
 					if any(value in rt for value in extras_filter): continue
-
 					if name.endswith('m2ts'):
 						if ignoreM2ts: continue
 						name = folder_name
@@ -116,7 +116,7 @@ class source:
 		return sources
 
 	def year_query_list(self):
-		return [str(self.year), str(int(self.year)+1), str(int(self.year)-1)]
+		return [str(self.year), str(int(self.year)+1), str(int(self.year)-1)] if self.year else []
 
 	def episode_query_list(self):
 		return [
@@ -126,6 +126,8 @@ class source:
 				'[.-]%02dx%02d[.-]' % (int(self.season), int(self.episode)),
 				's%de%02d' % (int(self.season), int(self.episode)),
 				's%02de%02d' % (int(self.season), int(self.episode)),
+				's%dep%02d' % (int(self.season), int(self.episode)),
+				's%02dep%02d' % (int(self.season), int(self.episode)),
 				'season%depisode%d' % (int(self.season), int(self.episode)),
 				'season%depisode%02d' % (int(self.season), int(self.episode)),
 				'season%02depisode%02d' % (int(self.season), int(self.episode))]
@@ -148,7 +150,7 @@ class source:
 
 	def resolve(self, url):
 		try:
-			url = realdebrid.RealDebrid().unrestrict_link(url)
+			url = cache.get(RealDebrid().unrestrict_link, 48, url)
 			return url
 		except:
 			from resources.lib.modules import log_utils

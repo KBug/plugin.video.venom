@@ -8,8 +8,7 @@ from json import loads as jsloads
 import re
 import _strptime # import _strptime to workaround python 2 bug with threads
 from sys import exit as sysexit
-try: from sqlite3 import dbapi2 as database
-except: from pysqlite2 import dbapi2 as database
+from sqlite3 import dbapi2 as database
 from urllib.parse import parse_qsl, quote_plus
 from resources.lib.modules import control
 from resources.lib.modules import cleandate
@@ -38,10 +37,8 @@ class lib_tools:
 				try: ftp.cwd(ftparg[0][4])
 				except: ftp.mkd(ftparg[0][4])
 				ftp.quit()
-			except:
-				log_utils.error()
-		except:
-			log_utils.error()
+			except: log_utils.error()
+		except: log_utils.error()
 
 	@staticmethod
 	def write_file(path, content):
@@ -52,8 +49,7 @@ class lib_tools:
 			file = control.openFile(path, 'w')
 			file.write(str(content))
 			file.close()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	@staticmethod
 	def nfo_url(media_string, ids):
@@ -88,8 +84,7 @@ class lib_tools:
 			path = control.joinPath(base_path, foldername)
 			if season: path = control.joinPath(path, 'Season %s' % season)
 			return path
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	@staticmethod
 	def clean():
@@ -126,8 +121,7 @@ class lib_tools:
 				if i['file'].rstrip('/').rstrip('\\') in paths:
 					contains = True
 					break
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		if not contains:
 			try:
 				global folder_setup
@@ -149,8 +143,7 @@ class lib_tools:
 						contains = False
 						control.notification(message=32112)
 						# control.refresh()
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		return contains
 
 	def service(self):
@@ -171,8 +164,7 @@ class lib_tools:
 				dbcur.execute('''INSERT INTO service Values (?, ?)''', ('last_run', last_service))
 				dbcur.connection.commit()
 			else: last_service = str(fetch[1])
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		finally:
 			dbcur.close() ; dbcon.close()
 		try: control.homeWindow.setProperty(self.property, last_service)
@@ -194,8 +186,7 @@ class lib_tools:
 					dbcur.execute('''CREATE TABLE IF NOT EXISTS service (setting TEXT, value TEXT, UNIQUE(setting));''')
 					dbcur.execute('''INSERT OR REPLACE INTO service Values (?, ?)''', ('last_run', last_service))
 					dbcur.connection.commit()
-				except:
-					log_utils.error()
+				except: log_utils.error()
 				finally:
 					dbcur.close() ; dbcon.close()
 				if control.setting('library.service.update') == 'false' or service_update is False: continue
@@ -205,8 +196,6 @@ class lib_tools:
 				if control.monitor.waitForAbort(60*15): break
 			except:
 				log_utils.error()
-				continue
-
 
 class libmovies:
 	def __init__(self):
@@ -219,8 +208,7 @@ class libmovies:
 			control.makeFile(self.library_folder)
 			source_content = "('%s','movies','metadata.themoviedb.org','',2147483647,1,'<settings version=\"2\"><setting id=\"certprefix\" default=\"true\">Rated </setting><setting id=\"fanart\">true</setting><setting id=\"imdbanyway\">true</setting><setting id=\"keeporiginaltitle\" default=\"true\">false</setting><setting id=\"language\" default=\"true\">en</setting><setting id=\"RatingS\" default=\"true\">TMDb</setting><setting id=\"tmdbcertcountry\" default=\"true\">us</setting><setting id=\"trailer\">true</setting></settings>',0,0,NULL,NULL)" % self.library_folder
 			library_sources.add_source('Venom Movies', self.library_folder, source_content, 'DefaultMovies.png')
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def list_update(self):
 		contains = lib_tools().ckKodiSources()
@@ -231,13 +219,11 @@ class libmovies:
 			dbcur = dbcon.cursor()
 			dbcur.execute('''CREATE TABLE IF NOT EXISTS lists (type TEXT, list_name TEXT, url TEXT, UNIQUE(type, list_name, url));''')
 			dbcur.connection.commit()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		try:
 			results = dbcur.execute('''SELECT * FROM lists WHERE type="movies";''').fetchall()
 			if not results: return control.notification(message=32113)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		finally:
 			dbcur.close() ; dbcon.close()
 		total_added = 0
@@ -251,8 +237,7 @@ class libmovies:
 					from resources.lib.indexers import tmdb
 					if '/list/' not in url: items = tmdb.Movies().tmdb_list(url)
 					else: items = tmdb.Movies().tmdb_collections_list(url)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 			if not items: continue
 			if service_notification and not control.condVisibility('Window.IsVisible(infodialog)') and not control.condVisibility('Player.HasVideo'):
 				control.notification(title='list...' + list_name + ' - ' + type, message=32552)
@@ -262,8 +247,7 @@ class libmovies:
 					files_added = self.add('%s (%s)' % (i['title'], i['year']), i['title'], i['year'], i['imdb'], i['tmdb'], range=True)
 					if general_notification and files_added > 0: control.notification(title='%s (%s)' % (i['title'], i['year']), message=32554)
 					if files_added > 0: total_added += 1
-				except:
-					log_utils.error()
+				except: log_utils.error()
 		if self.library_update == 'true' and not control.condVisibility('Library.IsScanningVideo') and total_added > 0:
 			if contains:
 				control.sleep(10000)
@@ -314,8 +298,7 @@ class libmovies:
 				files_added = self.add('%s (%s)' % (i['title'], i['year']), i['title'], i['year'], i['imdb'], i['tmdb'], range=True)
 				if general_notification and files_added > 0: control.notification(title='%s (%s)' % (i['title'], i['year']), message=32554)
 				if files_added > 0: total_added += 1
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		if self.library_update == 'true' and not control.condVisibility('Library.IsScanningVideo') and total_added > 0:
 			if contains:
 				control.sleep(10000)
@@ -335,8 +318,7 @@ class libmovies:
 			elif 'tmdb_favorites' in url: message = 32680
 			elif all(i in url for i in ('themoviedb', '/list/')): message = 32681
 			else: message = 'list import'
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		if general_notification:
 			if not control.condVisibility('Window.IsVisible(infodialog)') and not control.condVisibility('Player.HasVideo'):
 				control.notification(message=message)
@@ -358,8 +340,7 @@ class libmovies:
 				url = url.split('&sort_by')[0]
 				from resources.lib.indexers import tmdb
 				items = tmdb.Movies().tmdb_collections_list(url)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		if not items:
 			if general_notification: return control.notification(title=message, message=33049)
 		contains = lib_tools().ckKodiSources()
@@ -370,8 +351,7 @@ class libmovies:
 				files_added = self.add('%s (%s)' % (i['title'], i['year']), i['title'], i['year'], i['imdb'], i['tmdb'], range=True)
 				if general_notification and files_added > 0: control.notification(title='%s (%s)' % (i['title'], i['year']), message=32554)
 				if files_added > 0: total_added += 1
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		try:
 			content_type = 'movies'
 			control.makeFile(control.dataPath)
@@ -380,8 +360,7 @@ class libmovies:
 			dbcur.execute('''CREATE TABLE IF NOT EXISTS lists (type TEXT, list_name TEXT, url TEXT, UNIQUE(type, list_name, url));''')
 			dbcur.execute('''INSERT OR REPLACE INTO lists Values (?, ?, ?)''', (content_type, list_name, url))
 			dbcur.connection.commit()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		finally:
 			dbcur.close() ; dbcon.close()
 		if self.library_update == 'true' and not control.condVisibility('Library.IsScanningVideo') and total_added > 0:
@@ -405,8 +384,7 @@ class libmovies:
 			lib_tools.create_folder(folder)
 			lib_tools.write_file(control.joinPath(folder, lib_tools.legal_filename(transtitle) + '.' + year + '.strm'), content)
 			lib_tools.write_file(control.joinPath(folder, lib_tools.legal_filename(transtitle) + '.' + year + '.nfo'), lib_tools.nfo_url('movie', i))
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 
 class libtvshows:
@@ -432,8 +410,7 @@ class libtvshows:
 			# source_content = "('%s','tvshows','metadata.tvshows.themoviedb.org','',0,0,'<settings version=\"2\"><setting id=\"alsoimdb\" default=\"true\">false</setting><setting id=\"certprefix\" default=\"true\"></setting><setting id=\"fallback\">true</setting><setting id=\"fanarttvart\">true</setting><setting id=\"keeporiginaltitle\" default=\"true\">false</setting><setting id=\"language\" default=\"true\">en</setting><setting id=\"RatingS\" default=\"true\">Themoviedb</setting><setting id=\"tmdbart\">true</setting><setting id=\"tmdbcertcountry\" default=\"true\">us</setting></settings>',0,0,NULL,NULL)" % self.library_folder
 			# control.add_source(source_name, self.library_folder, source_content, icon)
 			library_sources.add_source(source_name, self.library_folder, source_content, 'DefaultTVShows.png')
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def list_update(self):
 		contains = lib_tools().ckKodiSources()
@@ -444,13 +421,11 @@ class libtvshows:
 			dbcur = dbcon.cursor()
 			dbcur.execute('''CREATE TABLE IF NOT EXISTS lists (type TEXT, list_name TEXT, url TEXT, UNIQUE(type, list_name, url));''')
 			dbcur.connection.commit()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		try:
 			results = dbcur.execute('''SELECT * FROM lists WHERE type="tvshows";''').fetchall()
 			if not results: return control.notification(message=32124)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		finally:
 			dbcur.close() ; dbcon.close()
 		total_added = 0 ; items = []
@@ -464,8 +439,7 @@ class libtvshows:
 					from resources.lib.indexers import tmdb
 					if '/list/' not in url: items = tmdb.TVshows().tmdb_list(url)
 					else: items = tmdb.TVshows().tmdb_collections_list(url)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 			if not items: continue
 			if service_notification and not control.condVisibility('Window.IsVisible(infodialog)') and not control.condVisibility('Player.HasVideo'):
 				control.notification(title='list...' + list_name + ' - ' + type, message=32552)
@@ -476,8 +450,7 @@ class libtvshows:
 					if files_added is None: continue
 					if general_notification and files_added > 0: control.notification(title=i['title'], message=32554)
 					if files_added > 0: total_added += 1
-				except:
-					log_utils.error()
+				except: log_utils.error()
 		if self.library_update == 'true' and not control.condVisibility('Library.IsScanningVideo') and total_added > 0:
 			if contains:
 				control.sleep(10000)
@@ -494,8 +467,7 @@ class libtvshows:
 				from resources.lib.menus import seasons, episodes
 				seasons = seasons.Seasons().tmdb_list(tvshowtitle, imdb, tmdb, tvdb, art=None) # fetch fresh meta (uncached)
 				# status = seasons[0]['status'].lower()
-			except:
-				return log_utils.error()
+			except: return log_utils.error()
 			files_added = 0
 			for season in seasons:
 				try: items = episodes.Episodes().tmdb_list(tvshowtitle, imdb, tmdb, tvdb, meta=season, season=season['season'])
@@ -513,8 +485,7 @@ class libtvshows:
 					lib = jsloads(lib)['result']['episodes']
 					lib = ['S%02dE%02d' % (int(i['season']), int(i['episode'])) for i in lib]
 					items = [i for i in items if not 'S%02dE%02d' % (int(i['season']), int(i['episode'])) in lib]
-				except:
-					lib = []
+				except: lib = []
 				for i in items:
 					if lib != []: continue # this prevents missing eps to get added if item is aded back
 					if control.monitor.abortRequested(): return sysexit()
@@ -524,8 +495,7 @@ class libtvshows:
 						if not premiered and self.include_unknown == 'false': continue
 						self.strmFile(i)
 						files_added += 1
-					except:
-						log_utils.error()
+					except: log_utils.error()
 			if files_added == 0 and general_notification: control.notification(title=tvshowtitle, message=32652)
 			if range: return files_added
 			if self.library_update == 'true' and not control.condVisibility('Library.IsScanningVideo') and files_added > 0:
@@ -533,8 +503,7 @@ class libtvshows:
 					if general_notification: control.notification(title=tvshowtitle, message=32554)
 					control.execute('UpdateLibrary(video)')
 				elif general_notification: control.notification(title=tvshowtitle, message=32104)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def silent(self, url):
 		control.hide()
@@ -551,8 +520,7 @@ class libtvshows:
 				files_added = self.add(i['title'], i['year'], i['imdb'], i['tmdb'], i['tvdb'], range=True)
 				if general_notification and files_added > 0: control.notification(title=i['title'], message=32554)
 				if files_added > 0: total_added += 1
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		if self.library_update == 'true' and not control.condVisibility('Library.IsScanningVideo') and total_added > 0:
 			if contains:
 				control.sleep(10000)
@@ -572,8 +540,7 @@ class libtvshows:
 			elif 'tmdb_favorites' in url: message = 32680
 			elif all(i in url for i in ('themoviedb', '/list/')): message = 32681
 			else: message = 'list import'
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		if general_notification:
 			if not control.condVisibility('Window.IsVisible(infodialog)') and not control.condVisibility('Player.HasVideo'):
 				control.notification(message=message)
@@ -595,8 +562,7 @@ class libtvshows:
 				url = url.split('&sort_by')[0]
 				from resources.lib.indexers import tmdb
 				items = tmdb.TVshows().tmdb_collections_list(url)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		if not items:
 			if general_notification: return control.notification(title=message, message=33049)
 		contains = lib_tools().ckKodiSources()
@@ -607,8 +573,7 @@ class libtvshows:
 				files_added = self.add(i['title'], i['year'], i['imdb'], i['tmdb'], i['tvdb'], range=True)
 				if general_notification and files_added > 0: control.notification(title=i['title'], message=32554)
 				if files_added > 0: total_added += 1
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		try:
 			content_type = 'tvshows'
 			control.makeFile(control.dataPath)
@@ -617,8 +582,7 @@ class libtvshows:
 			dbcur.execute('''CREATE TABLE IF NOT EXISTS lists (type TEXT, list_name TEXT, url TEXT, UNIQUE(type, list_name, url));''')
 			dbcur.execute('''INSERT OR REPLACE INTO lists Values (?, ?, ?)''', (content_type, list_name, url))
 			dbcur.connection.commit()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		finally:
 			dbcur.close() ; dbcon.close()
 		if self.library_update == 'true' and not control.condVisibility('Library.IsScanningVideo') and total_added > 0:
@@ -650,8 +614,7 @@ class libtvshows:
 			folder = lib_tools.make_path(self.library_folder, transtitle, year, season)
 			lib_tools.create_folder(folder)
 			lib_tools.write_file(control.joinPath(folder, lib_tools.legal_filename('%s S%02dE%02d' % (transtitle, int(season), int(episode))) + '.strm'), content)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 
 class libepisodes:
@@ -735,8 +698,7 @@ class libepisodes:
 			try:
 				fetch = dbcur.execute('''SELECT * FROM tvshows WHERE id=?''', (item['tvdb'],)).fetchone()
 				if fetch: it = eval(fetch[1])
-			except:
-				log_utils.error()
+			except: log_utils.error()
 			try:
 				if it: raise Exception()
 				seasons = seasonsX.Seasons().tmdb_list(item['tvshowtitle'], item['imdb'], item['tmdb'], item['tvdb'], art=None) # fetch fresh meta (uncached)
@@ -751,8 +713,7 @@ class libepisodes:
 				if status == 'ended':
 					dbcur.execute('''INSERT INTO tvshows Values (?, ?)''', (item['tvdb'], repr(it)))
 					dbcur.connection.commit()
-			except:
-				log_utils.error()
+			except: log_utils.error()
 			try:
 				id = [item['imdb'], item['tvdb']]
 				if item['tmdb']: id += [item['tmdb']]
@@ -764,8 +725,7 @@ class libepisodes:
 				num = [x for x,y in enumerate(it) if str(y['season']) == str(ep['season']) and str(y['episode']) == str(ep['episode'])][-1]
 				it = [y for x,y in enumerate(it) if x > num]
 				if len(it) == 0: continue
-			except:
-				continue
+			except: continue
 			for i in it:
 				if control.monitor.abortRequested(): return sysexit()
 				try:
@@ -777,8 +737,7 @@ class libepisodes:
 					libtvshows().strmFile(i)
 					files_added += 1
 					if service_notification: control.notification(title=item['tvshowtitle'], message=32678)
-				except:
-					log_utils.error()
+				except: log_utils.error()
 		try: dbcur.close() ; dbcon.close()
 		except: pass
 		if files_added == 0 and service_notification: control.notification(message=32109)

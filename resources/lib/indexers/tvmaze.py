@@ -3,19 +3,214 @@
 	Venom Add-on
 """
 
-import re
+from re import findall as re_findall
 import requests
+from requests.adapters import HTTPAdapter
 from threading import Thread
+from urllib3.util.retry import Retry
 from urllib.parse import quote_plus
 from resources.lib.database import cache, metacache, fanarttv_cache
 from resources.lib.indexers.tmdb import TVshows as tmdb_indexer
 from resources.lib.indexers.fanarttv import FanartTv
 from resources.lib.modules import client
 from resources.lib.modules.control import notification, sleep, apiLanguage, setting as getSetting
-from resources.lib.modules import log_utils
 from resources.lib.modules import trakt
 
-networks_this_season = [
+base_link = 'https://api.tvmaze.com'
+info_link = 'https://api.tvmaze.com/shows/%s?embed=cast'
+
+session = requests.Session()
+retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+session.mount('https://api.tvmaze.com', HTTPAdapter(max_retries=retries, pool_maxsize=100))
+
+
+class TVMaze:
+	def __init__(self):
+		self.lang = apiLanguage()['tvdb']
+
+	def get_request(self,url): # API calls are rate limited to allow at least 20 calls every 10 seconds per IP address
+		try:
+			try:
+				response = session.get(url, timeout=10)
+			except requests.exceptions.SSLError:
+				response = session.get(url, verify=False)
+		except requests.exceptions.ConnectionError:
+			return notification(message=32024)
+		if response.status_code in (200, 201): return response.json()
+		elif response.status_code == 404:
+			if getSetting('debug.level') == '1':
+				from resources.lib.modules import log_utils
+				log_utils.log('TVMAZE get_request() failed: (404:NOT FOUND) - URL: %s' % url, __name__, level=log_utils.LOGDEBUG)
+		elif 'Retry-After' in response.headers: # API REQUESTS ARE BEING THROTTLED, INTRODUCE WAIT TIME
+			throttleTime = response.headers['Retry-After']
+			notification(message='TVMAZE Throttling Applied, Sleeping for %s seconds' % throttleTime)
+			sleep((int(throttleTime) + 1) * 1000)
+			return self.get_request(url)
+		else:
+			if getSetting('debug.level') == '1':
+				from resources.lib.modules import log_utils
+				log_utils.log('TVMaze get_request() failed: URL: %s\n                       msg : TVMaze Response: %s' % (
+					url, response.text), __name__, log_utils.LOGDEBUG)
+			return None
+
+
+class TVshows(TVMaze):
+	def __init__(self):
+		TVMaze.__init__(self)
+		last = []
+		self.count = 40
+		self.list = []
+		self.meta = []
+		self.threads = []
+		self.tvdb_key = getSetting('tvdb.api.key')
+		self.imdb_user = getSetting('imdb.user').replace('ur', '')
+		self.user = str(self.imdb_user) + str(self.tvdb_key)
+		self.enable_fanarttv = getSetting('enable.fanarttv') == 'true'
+
+	def tvmaze_list(self, url):
+		try:
+			result = client.request(url) # not json request
+			next = ''
+			if getSetting('tvshows.networks.view') == '0':
+				result = client.parseDOM(result, 'section', attrs = {'id': 'this-seasons-shows'})
+				items = client.parseDOM(result, 'span', attrs = {'class': 'title .*'})
+				list_count = 60
+			elif getSetting('tvshows.networks.view') == '1':
+				result = client.parseDOM(result, 'div', attrs = {'id': 'w1'})
+				items = client.parseDOM(result, 'span', attrs = {'class': 'title'})
+				list_count = 25
+				page = int(str(url.split('&page=', 1)[1]))
+				next = '%s&page=%s' % (url.split('&page=', 1)[0], page+1)
+				last = []
+				last = client.parseDOM(result, 'li', attrs = {'class': 'last disabled'})
+				if last != []: next = ''
+			items = [client.parseDOM(i, 'a', ret='href') for i in items]
+			items = [i[0] for i in items if len(i) > 0]
+			items = [re_findall(r'/(\d+)/', i) for i in items] #https://www.tvmaze.com/networks/645/tlc pulls tvmaze_id from link
+			items = [i[0] for i in items if len(i) > 0]
+			items = items[:list_count]
+			sortList = items
+		except:
+			from resources.lib.modules import log_utils
+			log_utils.error()
+			return
+
+		def items_list(tvmaze_id):
+			# if i['metacache']: return # not possible with only a tvmaze_id
+			try:
+				values = {}
+				values['next'] = next
+				values['tvmaze'] = tvmaze_id
+				url = info_link % tvmaze_id
+				item = self.get_request(url) 
+				values['content'] = item.get('type', '').lower()
+				values['mediatype'] = 'tvshow'
+				values['title'] = item.get('name')
+				values['originaltitle'] = values['title']
+				values['tvshowtitle'] = values['title']
+				values['premiered'] = str(item.get('premiered', '')) if item.get('premiered') else ''
+				try: values['year'] = values['premiered'][:4]
+				except: values['year'] = ''
+				ids = item.get('externals')
+				imdb = str(ids.get('imdb', '')) if ids.get('imdb') else ''
+				tvdb = str(ids.get('thetvdb', '')) if ids.get('thetvdb') else ''
+				tmdb = '' # TVMaze does not have tmdb_id in api
+				studio = item.get('network', {}) or item.get('webChannel', {})
+				values['studio'] = studio.get('name', '')
+				values['genre'] = []
+				for i in item['genres']: values['genre'].append(i.title())
+				if values['genre'] == []: values['genre'] = 'NA'
+				values['duration'] = int(item.get('runtime', '')) * 60 if item.get('runtime') else ''
+				values['rating'] = str(item.get('rating').get('average', '')) if item.get('rating').get('average') else ''
+				values['plot'] = client.cleanHTML(item['summary'])
+				values['status'] = item.get('status', '')
+				values['castandart'] = []
+				for person in item['_embedded']['cast']:
+					try: values['castandart'].append({'name': person['person']['name'], 'role': person['character']['name'], 'thumbnail': (person['person']['image']['medium'] if person['person']['image']['medium'] else '')})
+					except: pass
+					if len(values['castandart']) == 150: break
+				image = item.get('image', {}) or ''
+				values['poster'] = image.get('original', '') if image else ''
+				values['fanart'] = '' ; values['banner'] = ''
+				values['mpaa'] = '' ; values['votes'] = ''
+				try: values['airday'] = item['schedule']['days'][0]
+				except: values['airday'] = ''
+				values['airtime'] = item['schedule']['time'] or ''
+				try: values['airzone'] = item['network']['country']['timezone']
+				except: values['airzone'] = ''
+				values['metacache'] = False 
+
+#### -- Missing id's lookup -- ####
+				if not tmdb and (imdb or tvdb):
+					try:
+						result = cache.get(tmdb_indexer().IdLookup, 168, imdb, tvdb)
+						tmdb = str(result.get('id', '')) if result.get('id') else ''
+					except: tmdb = ''
+				if not imdb or not tmdb or not tvdb:
+					try:
+						trakt_ids = trakt.SearchTVShow(quote_plus(values['tvshowtitle']), values['year'], full=False)
+						if not trakt_ids: raise Exception
+						ids = trakt_ids[0].get('show', {}).get('ids', {})
+						if not imdb: imdb = str(ids.get('imdb', '')) if ids.get('imdb') else ''
+						if not tmdb: tmdb = str(ids.get('tmdb', '')) if ids.get('tmdb') else ''
+						if not tvdb: tvdb = str(ids.get('tvdb', '')) if ids.get('tvdb') else ''
+					except:
+						log_utils.error()
+#################################
+				if not tmdb:
+					return log_utils.log('tvshowtitle: (%s) missing tmdb_id: ids={imdb: %s, tmdb: %s, tvdb: %s}' % (values['tvshowtitle'], imdb, tmdb, tvdb), __name__, log_utils.LOGDEBUG) # log TMDb shows that they do not have
+				# self.list = metacache.fetch(self.list, self.lang, self.user)
+				# if self.list['metacache'] is True: raise Exception()
+
+				showSeasons = cache.get(tmdb_indexer().get_showSeasons_meta, 96, tmdb)
+				if not showSeasons: return
+				showSeasons = dict((k, v) for k, v in iter(showSeasons.items()) if v is not None and v != '') # removes empty keys so .update() doesn't over-write good meta
+				values.update(showSeasons)
+				if not values.get('imdb'): values['imdb'] = imdb
+				if not values.get('tmdb'): values['tmdb'] = tmdb
+				if not values.get('tvdb'): values['tvdb'] = tvdb
+				for k in ('seasons',): values.pop(k, None) # pop() keys from showSeasons that are not needed anymore
+				if self.enable_fanarttv:
+					extended_art = fanarttv_cache.get(FanartTv().get_tvshow_art, 336, tvdb)
+					if extended_art: values.update(extended_art)
+				meta = {'imdb': imdb, 'tmdb': tmdb, 'tvdb': tvdb, 'lang': self.lang, 'user': self.user, 'item': values} # DO NOT move this after "values = dict()" below or it becomes the same object and "del meta['item']['next']" removes it from both
+				values = dict((k,v) for k, v in iter(values.items()) if v is not None and v != '')
+				self.list.append(values)
+				if 'next' in meta.get('item'): del meta['item']['next'] # next can not exist in metacache
+				self.meta.append(meta)
+				self.meta = [i for i in self.meta if i.get('tmdb')] # without this ui removed missing tmdb but it still writes these cases to metacache?
+				metacache.insert(self.meta)
+			except:
+				from resources.lib.modules import log_utils
+				log_utils.error()
+		try:
+			threads = []
+			append = threads.append
+			for tvmaze_id in items:
+				append(Thread(target=items_list, args=(tvmaze_id,)))
+			[i.start() for i in threads]
+			[i.join() for i in threads]
+			sorted_list = []
+			self.list = [i for i in self.list if i.get('tmdb') and i.get('tmdb') != '0'] # to rid missing tmdb_id's because season list can not load without
+			for i in sortList:
+				sorted_list += [item for item in self.list if str(item['tvmaze']) == str(i)]
+			return sorted_list
+		except:
+			log_utils.error()
+			return
+
+	def show_lookup(self, tvdb):
+		url = '%s%s' % (base_link, '/lookup/shows?thetvdb=%s' % tvdb)
+		response = self.get_request(url)
+		return response['id']
+
+	def get_full_series(self, tvmaze):
+		url = '%s%s' % (base_link, '/shows/%s?embed[]=seasons&embed[]=episodes&embed[]=cast&embed[]=images' % tvmaze)
+		response = self.get_request(url)
+		return response
+
+	def get_networks_thisSeason(self):
+		return [
 			('A&E', '/networks/29/ae', 'https://i.imgur.com/xLDfHjH.png'),
 			('ABC', '/networks/3/abc', 'https://i.imgur.com/qePLxos.png'),
 			('Acorn TV', '/webchannels/129/acorn-tv', 'https://i.imgur.com/YMtys7n.png'),
@@ -102,7 +297,8 @@ networks_this_season = [
 			('WWE Network', '/webchannels/15/wwe-network', 'https://i.imgur.com/JjbTbb2.png'),
 			('YouTube Premium', '/webchannels/43/youtube-premium', 'https://i.postimg.cc/vHtqdhyt/youtube-premium.png')]
 
-networks_view_all = [
+	def get_networks_viewAll(self):
+		return [
 			('A&E', '/shows?Show[network_id]=29&page=1', 'https://i.imgur.com/xLDfHjH.png'),
 			('ABC', '/shows?Show[network_id]=3&page=1', 'https://i.imgur.com/qePLxos.png'),
 			('Acorn TV', '/shows?Show[network_id]=129&page=1', 'https://i.imgur.com/YMtys7n.png'),
@@ -196,188 +392,14 @@ networks_view_all = [
 			# ('YouTube', '/webchannels/21/youtube', 'https://i.imgur.com/ZfewP1Y.png'),
 			('YouTube Premium', '/shows?Show[webChannel_id]=43&page=1', 'https://i.postimg.cc/vHtqdhyt/youtube-premium.png')]
 
-originals_this_season = [
+	def original_thisSeason(self):
+		return [
 			('Amazon', '/webchannels/3/amazon', 'https://i.imgur.com/ru9DDlL.png'),
 			('Hulu', '/webchannels/2/hulu', 'https://i.imgur.com/gvHOZgC.png'),
 			('Netflix', '/webchannels/1/netflix', 'https://i.postimg.cc/c4vHp9wV/netflix.png')]
 
-originals_view_all = [
+	def originals_viewAll(self):
+		return [
 			('Amazon', '/shows?Show[webChannel_id]=3&page=1', 'https://i.imgur.com/ru9DDlL.png'),
 			('Hulu', '/shows?Show[webChannel_id]=2&page=1', 'https://i.imgur.com/gvHOZgC.png'),
 			('Netflix', '/shows?Show[webChannel_id]=1&page=1', 'https://i.postimg.cc/c4vHp9wV/netflix.png')]
-
-def get_request(url): # API calls are rate limited to allow at least 20 calls every 10 seconds per IP address
-	try:
-		try:
-			response = requests.get(url, timeout=10)
-		except requests.exceptions.SSLError:
-			response = requests.get(url, verify=False)
-	except requests.exceptions.ConnectionError:
-		return notification(message=32024)
-	if '200' in str(response):
-		return response.json()
-	elif 'Retry-After' in response.headers: # API REQUESTS ARE BEING THROTTLED, INTRODUCE WAIT TIME
-		throttleTime = response.headers['Retry-After']
-		notification(message='TVMAZE Throttling Applied, Sleeping for %s seconds' % throttleTime)
-		sleep((int(throttleTime) + 0.5) * 1000)
-		return get_request(url)
-	else:
-		log_utils.log('Get request failed to TVMAZE URL: %s\n                       msg : TVMAZE Response: %s' %
-			(url, response.text), __name__, log_utils.LOGDEBUG)
-		return None
-
-
-class tvshows:
-	def __init__(self):
-		last = []
-		self.count = 40
-		self.list = []
-		self.meta = []
-		self.threads = []
-		self.lang = apiLanguage()['tvdb']
-		self.base_link = 'https://api.tvmaze.com'
-		self.tvmaze_info_link = 'https://api.tvmaze.com/shows/%s?embed=cast'
-		self.tvdb_key = getSetting('tvdb.api.key')
-		self.imdb_user = getSetting('imdb.user').replace('ur', '')
-		self.user = str(self.imdb_user) + str(self.tvdb_key)
-		self.enable_fanarttv = getSetting('enable.fanarttv') == 'true'
-
-	def tvmaze_list(self, url):
-		try:
-			result = client.request(url) # not json request
-			next = ''
-			if getSetting('tvshows.networks.view') == '0':
-				result = client.parseDOM(result, 'section', attrs = {'id': 'this-seasons-shows'})
-				items = client.parseDOM(result, 'span', attrs = {'class': 'title .*'})
-				list_count = 60
-			if getSetting('tvshows.networks.view') == '1':
-				result = client.parseDOM(result, 'div', attrs = {'id': 'w1'})
-				items = client.parseDOM(result, 'span', attrs = {'class': 'title'})
-				list_count = 25
-				page = int(str(url.split('&page=', 1)[1]))
-				next = '%s&page=%s' % (url.split('&page=', 1)[0], page+1)
-				last = []
-				last = client.parseDOM(result, 'li', attrs = {'class': 'last disabled'})
-				if last != []: next = ''
-			items = [client.parseDOM(i, 'a', ret='href') for i in items]
-			items = [i[0] for i in items if len(i) > 0]
-			items = [re.findall(r'/(\d+)/', i) for i in items] #https://www.tvmaze.com/networks/645/tlc pulls tvmaze_id from link
-			items = [i[0] for i in items if len(i) > 0]
-			items = items[:list_count]
-			sortList = items
-		except:
-			log_utils.error()
-			return
-
-		def items_list(tvmaze_id):
-			# if i['metacache']: return # not possible with only a tvmaze_id
-			try:
-				values = {}
-				values['next'] = next
-				values['tvmaze'] = tvmaze_id
-				url = self.tvmaze_info_link % tvmaze_id
-				item = get_request(url) 
-				values['content'] = item.get('type', '').lower()
-				values['mediatype'] = 'tvshow'
-				values['title'] = item.get('name')
-				values['originaltitle'] = values['title']
-				values['tvshowtitle'] = values['title']
-				values['premiered'] = str(item.get('premiered', '')) if item.get('premiered') else ''
-				try: values['year'] = values['premiered'][:4]
-				except: values['year'] = ''
-				ids = item.get('externals')
-				imdb = str(ids.get('imdb', '')) if ids.get('imdb') else ''
-				tvdb = str(ids.get('thetvdb', '')) if ids.get('thetvdb') else ''
-				tmdb = '' # TVMaze does not have tmdb_id in api
-				studio = item.get('network', {}) or item.get('webChannel', {})
-				values['studio'] = studio.get('name', '')
-				values['genre'] = []
-				for i in item['genres']: values['genre'].append(i.title())
-				if values['genre'] == []: values['genre'] = 'NA'
-				values['duration'] = int(item.get('runtime', '')) * 60 if item.get('runtime') else ''
-				values['rating'] = str(item.get('rating').get('average', '')) if item.get('rating').get('average') else ''
-				values['plot'] = client.cleanHTML(item['summary'])
-				values['status'] = item.get('status', '')
-				values['castandart'] = []
-				for person in item['_embedded']['cast']:
-					try: values['castandart'].append({'name': person['person']['name'], 'role': person['character']['name'], 'thumbnail': (person['person']['image']['medium'] if person['person']['image']['medium'] else '')})
-					except: pass
-					if len(values['castandart']) == 150: break
-				image = item.get('image', {}) or ''
-				values['poster'] = image.get('original', '') if image else ''
-				values['fanart'] = '' ; values['banner'] = ''
-				values['mpaa'] = '' ; values['votes'] = ''
-				try: values['airday'] = item['schedule']['days'][0]
-				except: values['airday'] = ''
-				values['airtime'] = item['schedule']['time'] or ''
-				try: values['airzone'] = item['network']['country']['timezone']
-				except: values['airzone'] = ''
-				values['metacache'] = False 
-
-#### -- Missing id's lookup -- ####
-				if not tmdb and (imdb or tvdb):
-					try:
-						result = cache.get(tmdb_indexer().IdLookup, 96, imdb, tvdb)
-						tmdb = str(result.get('id', '')) if result.get('id') else ''
-					except: tmdb = ''
-				if not imdb or not tmdb or not tvdb:
-					try:
-						trakt_ids = trakt.SearchTVShow(quote_plus(values['tvshowtitle']), values['year'], full=False)
-						if not trakt_ids: raise Exception
-						ids = trakt_ids[0].get('show', {}).get('ids', {})
-						if not imdb: imdb = str(ids.get('imdb', '')) if ids.get('imdb') else ''
-						if not tmdb: tmdb = str(ids.get('tmdb', '')) if ids.get('tmdb') else ''
-						if not tvdb: tvdb = str(ids.get('tvdb', '')) if ids.get('tvdb') else ''
-					except:
-						log_utils.error()
-#################################
-				if not tmdb:
-					return log_utils.log('tvshowtitle: (%s) missing tmdb_id: ids={imdb: %s, tmdb: %s, tvdb: %s}' % (values['tvshowtitle'], imdb, tmdb, tvdb), __name__, log_utils.LOGDEBUG) # log TMDb shows that they do not have
-				# self.list = metacache.fetch(self.list, self.lang, self.user)
-				# if self.list['metacache'] is True: raise Exception()
-
-				showSeasons = cache.get(tmdb_indexer().get_showSeasons_meta, 96, tmdb)
-				if not showSeasons: return
-				showSeasons = dict((k, v) for k, v in iter(showSeasons.items()) if v is not None and v != '') # removes empty keys so .update() doesn't over-write good meta
-				values.update(showSeasons)
-				if not values.get('imdb'): values['imdb'] = imdb
-				if not values.get('tmdb'): values['tmdb'] = tmdb
-				if not values.get('tvdb'): values['tvdb'] = tvdb
-				for k in ('seasons',): values.pop(k, None) # pop() keys from showSeasons that are not needed anymore
-				if self.enable_fanarttv:
-					extended_art = fanarttv_cache.get(FanartTv().get_tvshow_art, 336, tvdb)
-					if extended_art: values.update(extended_art)
-				meta = {'imdb': imdb, 'tmdb': tmdb, 'tvdb': tvdb, 'lang': self.lang, 'user': self.user, 'item': values} # DO NOT move this after "values = dict()" below or it becomes the same object and "del meta['item']['next']" removes it from both
-				values = dict((k,v) for k, v in iter(values.items()) if v is not None and v != '')
-				self.list.append(values)
-				if 'next' in meta.get('item'): del meta['item']['next'] # next can not exist in metacache
-				self.meta.append(meta)
-				self.meta = [i for i in self.meta if i.get('tmdb')] # without this ui removed missing tmdb but it still writes these cases to metacache?
-				metacache.insert(self.meta)
-			except:
-				log_utils.error()
-		try:
-			threads = []
-			append = threads.append
-			for tvmaze_id in items:
-				append(Thread(target=items_list, args=(tvmaze_id,)))
-			[i.start() for i in threads]
-			[i.join() for i in threads]
-			sorted_list = []
-			self.list = [i for i in self.list if i.get('tmdb') and i.get('tmdb') != '0'] # to rid missing tmdb_id's because season list can not load without
-			for i in sortList:
-				sorted_list += [item for item in self.list if str(item['tvmaze']) == str(i)]
-			return sorted_list
-		except:
-			log_utils.error()
-			return
-
-	def show_lookup(self, tvdb):
-		url = '%s%s' % (self.base_link, '/lookup/shows?thetvdb=%s' % tvdb)
-		response = get_request(url)
-		return response['id']
-
-	def get_full_series(self, tvmaze):
-		url = '%s%s' % (self.base_link, '/shows/%s?embed[]=seasons&embed[]=episodes&embed[]=cast&embed[]=images' % tvmaze)
-		response = get_request(url)
-		return response

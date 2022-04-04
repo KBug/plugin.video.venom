@@ -112,8 +112,7 @@ def make_settings_dict(): # service runs upon a setting change
 		refresh_playAction()
 		refresh_libPath()
 		return settings_dict
-	except:
-		return None
+	except: return None
 
 def openSettings(query=None, id=addonInfo('id')):
 	try:
@@ -164,16 +163,14 @@ def artPath():
 	return joinPath(xbmcaddon.Addon('plugin.video.venom').getAddonInfo('path'), 'resources', 'artwork', theme)
 
 def genreIconPath():
-	theme = appearance()
 	return joinPath(xbmcaddon.Addon('plugin.video.venom').getAddonInfo('path'), 'resources', 'artwork', 'genre_media', 'icons')
 
 def genrePosterPath():
-	theme = appearance()
 	return joinPath(xbmcaddon.Addon('plugin.video.venom').getAddonInfo('path'), 'resources', 'artwork', 'genre_media', 'posters')
 
 def appearance():
-	appearance = setting('appearance.1').lower()
-	return appearance
+	theme = setting('appearance.1').lower()
+	return theme
 
 def addonIcon():
 	theme = appearance()
@@ -320,7 +317,7 @@ def apiLanguage(ret_name=None):
 		lang['tmdb'] = [i[0] for i in iter(langDict.items()) if i[1] == lang['tmdb']][0]
 	return lang
 
-def mpaCountry(ret_name=None):
+def mpaCountry():
 # Countries with Content Rating System
 	countryDict = {'Australia': 'AU', 'Austria': 'AT', 'Brazil': 'BR', 'Bulgaria': 'BG', 'Canada': 'CA', 'China': 'CN', 'Denmark': 'DK', 'Estonia': 'EE',
 						'Finland': 'FI', 'France': 'FR', 'Germany': 'DE', 'Greece': 'GR', 'Hungary': 'HU', 'Hong Kong SAR China': 'HK', 'India': 'IN',

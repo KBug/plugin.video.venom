@@ -1362,8 +1362,8 @@ msgid "Preferred %s subtitle available in stream and has been set"
 msgstr "Preferowane napisy %s dostępne w strumieniu i zostały ustawione"
 
 msgctxt "#32395"
-msgid ""
-msgstr ""
+msgid "No matching Subtitle language found"
+msgstr "Nie znaleziono pasującego języka napisów""
 
 msgctxt "#32396"
 msgid ""

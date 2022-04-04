@@ -4,8 +4,7 @@
 """
 
 from json import loads as jsloads
-try: from sqlite3 import dbapi2 as database
-except ImportError: from pysqlite2 import dbapi2 as database
+from sqlite3 import dbapi2 as database
 from resources.lib.modules import control
 
 dataPath = control.transPath(control.addonInfo('path'))
@@ -19,8 +18,7 @@ def getFavourites(content):
 		dbcur = dbcon.cursor()
 		items = dbcur.execute("SELECT * FROM %s" % content).fetchall()
 		items = [(i[0], eval(i[1])) for i in items]
-	except:
-		items = []
+	except: items = []
 	finally:
 		dbcur.close() ; dbcon.close()
 	return items
@@ -31,8 +29,7 @@ def getProgress(content):
 		dbcur = dbcon.cursor()
 		items = dbcur.execute("SELECT * FROM %s" % content).fetchall()
 		items = [(i[0], eval(i[1])) for i in items]
-	except:
-		items = []
+	except: items = []
 	finally:
 		dbcur.close() ; dbcon.close()
 	return items

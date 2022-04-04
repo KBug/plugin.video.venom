@@ -14,8 +14,7 @@ def iso_2_utc(iso_ts):
 		delim = -1
 		if not iso_ts.endswith('Z'):
 			delim = iso_ts.rfind('+')
-			if delim == -1:
-				delim = iso_ts.rfind('-')
+			if delim == -1: delim = iso_ts.rfind('-')
 		if delim > -1:
 			ts = iso_ts[:delim]
 			sign = iso_ts[delim]

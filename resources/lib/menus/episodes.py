@@ -350,8 +350,7 @@ class Episodes:
 	def trakt_progress_list(self, url, user, lang, direct=False, upcoming=False):
 		try:
 			url += '?extended=full'
-			result = trakt.getTrakt(url)
-			result = jsloads(result)
+			result = trakt.getTrakt(url).json()
 		except: return
 		items = []
 		progress_showunaired = getSetting('trakt.progress.showunaired') == 'true'
@@ -429,8 +428,7 @@ class Episodes:
 					else: raise Exception()
 					air_datetime_list = tools.convert_time(stringTime=combined, zoneFrom=i.get('airzone', ''), zoneTo='local', formatInput='%Y-%m-%dT%H:%M', formatOutput='%Y-%m-%dT%H:%M').split('T')
 					air_date, air_time = air_datetime_list[0], air_datetime_list[1]
-				except:
-					air_date, air_time = values.get('premiered', '') if values.get('premiered') else '', i.get('airtime', '') if i.get('airtime') else ''
+				except: air_date, air_time = values.get('premiered', '') if values.get('premiered') else '', i.get('airtime', '') if i.get('airtime') else ''
 				values['unaired'] = ''
 				if upcoming:
 					values['traktUpcomingProgress'] = True
@@ -901,13 +899,16 @@ class Episodes:
 				item.setProperty('tvshow.tmdb_id', tmdb)
 				if is_widget: item.setProperty('isVenom_widget', 'true')
 				blabel = tvshowtitle + ' S%02dE%02d' % (int(season), int(episode))
-				resumetime = Bookmarks().get(name=blabel, imdb=imdb, tmdb=tmdb, tvdb=tvdb, season=season, episode=episode, year=str(year), runtime=runtime, ck=True)
-				# item.setProperty('TotalTime', str(meta.get('duration'))) # Adding this property causes the Kodi bookmark CM items to be added
-				item.setProperty('ResumeTime', str(resumetime))
-				try:
-					watched_percent = round(float(resumetime) / float(runtime) * 100, 1) # resumetime and runtime are both in minutes
-					item.setProperty('percentplayed', str(watched_percent))
-				except: pass
+
+				if not i.get('unaired') == 'true':
+					resumetime = Bookmarks().get(name=blabel, imdb=imdb, tmdb=tmdb, tvdb=tvdb, season=season, episode=episode, year=str(year), runtime=runtime, ck=True)
+					# item.setProperty('TotalTime', str(meta.get('duration'))) # Adding this property causes the Kodi bookmark CM items to be added
+					item.setProperty('ResumeTime', str(resumetime))
+					try:
+						watched_percent = round(float(resumetime) / float(runtime) * 100, 1) # resumetime and runtime are both in minutes
+						item.setProperty('percentplayed', str(watched_percent))
+					except: pass
+
 				try: # Year is the shows year, not the seasons year. Extract year from premier date for infoLabels to have "season_year."
 					season_year = re.findall(r'(\d{4})', i.get('premiered', ''))[0]
 					meta.update({'year': season_year})

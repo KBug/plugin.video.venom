@@ -164,8 +164,7 @@ def vk(url):
 		try: url += [{'quality': 'SD', 'url': sources['240']}]
 		except: pass
 		if not url == []: return url
-	except:
-		return
+	except: return
 
 def odnoklassniki(url):
 	try:
@@ -182,8 +181,7 @@ def odnoklassniki(url):
 		url = hd + sd[:1]
 		if not url == []:
 			return url
-	except:
-		return
+	except: return
 
 def cldmailru(url):
 	try:
@@ -194,8 +192,7 @@ def cldmailru(url):
 		url = re.findall(r'"weblink_get"\s*:\s*\[.+?"url"\s*:\s*"([^"]+)', r)[0]
 		url = '%s%s?key=%s' % (url, v, tok)
 		return url
-	except:
-		return
+	except: return
 
 def yandex(url):
 	try:
@@ -211,5 +208,4 @@ def yandex(url):
 		r = jsloads(r)
 		url = r['models'][0]['data']['file']
 		return url
-	except:
-		return
+	except: return

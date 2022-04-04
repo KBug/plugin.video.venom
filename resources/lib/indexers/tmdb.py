@@ -13,30 +13,28 @@ from resources.lib.database import cache, metacache, fanarttv_cache
 from resources.lib.indexers.fanarttv import FanartTv
 from resources.lib.modules.control import setting as getSetting, notification, sleep, apiLanguage, mpaCountry, trailer as control_trailer, yesnoDialog
 
-base_link = 'https://api.themoviedb.org/3/'
-image_path = 'https://image.tmdb.org/t/p/%s'
+base_link = "https://api.themoviedb.org/3/"
+image_path = "https://image.tmdb.org/t/p/%s"
+
+session = requests.Session()
+retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+session.mount('https://api.themoviedb.org', HTTPAdapter(max_retries=retries, pool_maxsize=100))
 
 
 class TMDb:
 	def __init__(self):
 		self.API_key = getSetting('tmdb.api.key')
 		if not self.API_key: self.API_key = '3320855e65a9758297fec4f7c9717698'
-		self.session = requests.Session()
-		retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
-		self.session.mount('https://', HTTPAdapter(max_retries=retries))
 		self.set_resolutions()
 		self.lang = apiLanguage()['tmdb']
 		self.mpa_country = mpaCountry()
 		self.enable_fanarttv = getSetting('enable.fanarttv') == 'true'
 
-	def __del__(self):
-		self.session.close()
-
 	def get_request(self, url):
 		try:
-			try: response = self.session.get(url)
+			try: response = session.get(url, timeout=10)
 			except requests.exceptions.SSLError:
-				response = self.session.get(url, verify=False)
+				response = session.get(url, verify=False)
 		except requests.exceptions.ConnectionError:
 			notification(message=32024)
 			from resources.lib.modules import log_utils
@@ -106,9 +104,9 @@ class TMDb:
 # poster_path = 'w342', fanart_path = 'w1280', still_path = 'w500', profile_path = 'w185'
 	def set_resolutions(self):
 		paths = (
-				{'poster': 'w185', 'fanart': 'w300', 'still': 'w185', 'profile': 'w185'},
-				{'poster': 'w342', 'fanart': 'w780', 'still': 'w300', 'profile': 'w342'},
-				{'poster': 'w780', 'fanart': 'w1280', 'still': 'original', 'profile': 'h632'},
+				{'poster': 'w185', 'fanart': 'w300', 'still': 'w300', 'profile': 'w185'},
+				{'poster': 'w342', 'fanart': 'w780', 'still': 'w500', 'profile': 'w342'},
+				{'poster': 'w780', 'fanart': 'w1280', 'still': 'w780', 'profile': 'h632'},
 				{'poster': 'original', 'fanart': 'original', 'still': 'original', 'profile': 'original'})
 		resolutions = paths[int(getSetting('tmdb.imageResolutions', '2'))]
 		self.poster_path = image_path % resolutions['poster']
@@ -1059,8 +1057,10 @@ class Auth:
 			result = requests.get(url).json()
 			token = result.get('request_token')
 			url2 = self.auth_base_link + '/token/validate_with_login?api_key=%s' % self.API_key
-			post2 = {"username": "%s" % getSetting('tmdb.username'),
-							"password": "%s" % getSetting('tmdb.password'),
+			username = getSetting('tmdb.username')
+			password = getSetting('tmdb.password')
+			post2 = {"username": "%s" % username,
+							"password": "%s" % password,
 							"request_token": "%s" % token}
 			result2 = requests.post(url2, data=post2).json()
 			url3 = self.auth_base_link + '/session/new?api_key=%s' % self.API_key
@@ -1068,7 +1068,7 @@ class Auth:
 			result3 = requests.post(url3, data=post3).json()
 			if result3.get('success') is True:
 				session_id = result3.get('session_id')
-				msg = '%s' % ('username =' + username + '\n password =' + password + '\n token = ' + token + '\n confirm?')
+				msg = '%s' % ('username =' + username + '[CR]password =' + password + '[CR]token = ' + token + '[CR]confirm?')
 				if yesnoDialog(msg, '', ''):
 					setSetting('tmdb.session_id', session_id)
 					notification(message='TMDb Successfully Authorized')
@@ -1087,7 +1087,13 @@ class Auth:
 			if result.get('success') is True:
 				setSetting('tmdb.session_id', '')
 				notification(message='TMDb session_id successfully deleted')
-			else: notification(message='TMDb session_id deletion FAILED', icon='ERROR')
+			else:
+				from resources.lib.modules import log_utils
+				log_utils.log('TMDb Revoke session_id FAILED: %s' % result.get('status_message', ''), __name__, log_utils.LOGWARNING)
+				if 'id is invalid or not found' in result.get('status_message', ''):
+					setSetting('tmdb.session_id', '')
+					notification(message=result.get('status_message', ''), icon='ERROR')
+				else: notification(message='TMDb session_id deletion FAILED', icon='ERROR')
 		except:
 			from resources.lib.modules import log_utils
 			log_utils.error()

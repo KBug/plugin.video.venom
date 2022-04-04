@@ -409,8 +409,7 @@ class Collections:
 	def search(self): # update self.addDirectoryItem() to work for methods and not import navigator
 		from resources.lib.menus import navigator
 		navigator.Navigator().addDirectoryItem(getLS(32603) % self.highlight_color, 'collections_Searchnew', 'search.png', 'DefaultAddonsSearch.png', isFolder=False)
-		try: from sqlite3 import dbapi2 as database
-		except ImportError: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		try:
 			if not control.existsPath(control.dataPath): control.makeFile(control.dataPath)
 			dbcon = database.connect(control.searchFile)
@@ -438,8 +437,7 @@ class Collections:
 		k.doModal()
 		q = k.getText() if k.isConfirmed() else None
 		if not q: return control.closeAll()
-		try: from sqlite3 import dbapi2 as database
-		except ImportError: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		try:
 			dbcon = database.connect(control.searchFile)
 			dbcur = dbcon.cursor()
@@ -748,6 +746,7 @@ class Collections:
 			if poster.startswith('http'): poster = poster
 			else: poster = control.joinPath(artPath, poster) if artPath else icon
 			if not fanart: fanart = control.addonFanart()
+			queueMenu = getLS(32065)
 			url = 'plugin://plugin.video.venom/?action=%s' % action
 			cm = []
 			if context: cm.append((getLS(context[0]), 'RunPlugin(plugin://plugin.video.venom/?action=%s)' % context[1]))

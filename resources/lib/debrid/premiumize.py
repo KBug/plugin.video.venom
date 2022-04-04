@@ -5,7 +5,9 @@
 
 import re
 import requests
+from requests.adapters import HTTPAdapter
 from sys import argv, exit as sysexit
+from urllib3.util.retry import Retry
 from urllib.parse import quote_plus, urlencode
 from resources.lib.database import cache
 from resources.lib.modules import control
@@ -36,6 +38,10 @@ pm_icon = control.joinPath(control.artPath(), 'premiumize.png')
 addonFanart = control.addonFanart()
 invalid_extensions = ('.bmp', '.gif', '.jpg', '.nfo', '.part', '.png', '.rar', '.sample.', '.srt', '.txt', '.zip')
 
+session = requests.Session()
+retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+session.mount('https://www.premiumize.me', HTTPAdapter(max_retries=retries, pool_maxsize=100))
+
 
 class Premiumize:
 	name = "Premiumize.me"
@@ -50,24 +56,25 @@ class Premiumize:
 
 	def _get(self, url):
 		response = None
-		if self.token == '': return None
 		try:
-			response = requests.get(url, headers=self.headers, timeout=15).json()
+			if self.token == '':
+				log_utils.log('No Premiumize.me Token Found')
+				return None
+			response = session.get(url, headers=self.headers, timeout=15).json()
 			# if response.status_code in (200, 201): response = response.json() # need status code checking for server maintenance
 			if 'status' in response:
 				if response.get('status') == 'success': return response
 				if response.get('status') == 'error':
 					if self.server_notifications: control.notification(message=response.get('message'), icon=pm_icon)
 					log_utils.log('Premiumize.me: %s' % response.get('message'), level=log_utils.LOGWARNING)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return response
 
 	def _post(self, url, data={}):
 		response = None
 		if self.token == '': return None
 		try:
-			response = requests.post(url, data, headers=self.headers, timeout=45).json() # disgusting temp timeout change to fix server response lag
+			response = session.post(url, data, headers=self.headers, timeout=45).json() # disgusting temp timeout change to fix server response lag
 			# if response.status_code in (200, 201): response = response.json() # need status code checking for server maintenance
 			if 'status' in response:
 				if response.get('status') == 'success': return response
@@ -75,13 +82,12 @@ class Premiumize:
 					if 'You already have this job added' in response.get('message'): return None
 					if self.server_notifications: control.notification(message=response.get('message'), icon=pm_icon)
 					log_utils.log('Premiumize.me: %s' % response.get('message'), level=log_utils.LOGWARNING)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return response
 
 	def auth(self):
 		data = {'client_id': CLIENT_ID, 'response_type': 'device_code'}
-		token = requests.post('https://www.premiumize.me/token', data=data, timeout=15).json()
+		token = session.post('https://www.premiumize.me/token', data=data, timeout=15).json()
 		expiry = float(token['expires_in'])
 		token_ttl = token['expires_in']
 		poll_again = True
@@ -103,7 +109,7 @@ class Premiumize:
 
 	def poll_token(self, device_code):
 		data = {'client_id': CLIENT_ID, 'code': device_code, 'grant_type': 'device_code'}
-		token = requests.post('https://www.premiumize.me/token', data=data, timeout=15).json()
+		token = session.post('https://www.premiumize.me/token', data=data, timeout=15).json()
 		if 'error' in token:
 			if token['error'] == "access_denied":
 				control.okDialog(title='default', message=getLS(40020))
@@ -124,8 +130,7 @@ class Premiumize:
 		try:
 			accountInfo = self._get(account_info_url)
 			return accountInfo
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return None
 
 	def account_info_to_dialog(self):
@@ -147,8 +152,7 @@ class Premiumize:
 			items += [getLS(40044) % space_used]
 			items += [getLS(40045) % percentage_used]
 			return control.selectDialog(items, 'Premiumize')
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return
 
 	def valid_url(self, host):
@@ -157,8 +161,7 @@ class Premiumize:
 			if not self.hosts['Premiumize.me']: return False
 			if any(host in item for item in self.hosts['Premiumize.me']): return True
 			return False
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def get_hosts(self):
 		hosts_dict = {'Premiumize.me': []}
@@ -169,8 +172,7 @@ class Premiumize:
 			for x in result['directdl']:
 				for alias in result['aliases'][x]: append(alias)
 			hosts_dict['Premiumize.me'] = list(set(hosts))
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return hosts_dict
 
 	def unrestrict_link(self, link):
@@ -179,9 +181,7 @@ class Premiumize:
 			response = self._post(transfer_directdl_url, data)
 			try: return self.add_headers_to_url(response['content'][0]['link'])
 			except: return None
-		except:
-			log_utils.error()
-			return None
+		except: log_utils.error()
 
 	def resolve_magnet(self, magnet_url, info_hash, season, episode, ep_title):
 		from resources.lib.modules.source_utils import seas_ep_filter, extras_filter
@@ -220,9 +220,7 @@ class Premiumize:
 				return self.add_headers_to_url(file_url)
 			else:
 				log_utils.log('Premiumize.me: FAILED TO RESOLVE MAGNET "%s" : (%s)' % (magnet_url, failed_reason), __name__, log_utils.LOGWARNING)
-		except:
-			log_utils.error('Premiumize.me: Error RESOLVE MAGNET "%s" ' % magnet_url)
-			return None
+		except: log_utils.error('Premiumize.me: Error RESOLVE MAGNET "%s" ' % magnet_url)
 
 	def display_magnet_pack(self, magnet_url, info_hash):
 		end_results = []
@@ -239,9 +237,8 @@ class Premiumize:
 					except: path = item['path']
 					append({'link': item['link'], 'filename': path, 'size': float(item['size']) / 1073741824})
 			return end_results
-		except Exception as e:
-			log_utils.log('Premiumize.me Error display_magnet_pack: %s' % str(e), __name__, log_utils.LOGDEBUG)
-			return None
+		except: log_utils.error('Premiumize.me Error display_magnet_pack: %s' % magnet_url, __name__, log_utils.LOGDEBUG)
+
 
 	def add_uncached_torrent(self, magnet_url, pack=False):
 		def _transfer_info(transfer_id):
@@ -296,8 +293,7 @@ class Premiumize:
 		control.sleep(1000 * interval)
 		try:
 			control.progressDialog.close()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		control.hide()
 		return True
 
@@ -306,7 +302,7 @@ class Premiumize:
 			media_id = media_id.encode('ascii', errors='ignore').decode('ascii', errors='ignore')
 			media_id = media_id.replace(' ', '')
 			url = '%s?items[]=%s' % (cache_check_url, media_id)
-			result = requests.get(url, headers=self.headers)
+			result = session.get(url, headers=self.headers)
 			if any(value in response for value in ('500', '502', '504')):
 				log_utils.log('Premiumize.me Service Unavailable: %s' % response, __name__, log_utils.LOGDEBUG)
 			else: response = response.json()
@@ -317,14 +313,13 @@ class Premiumize:
 				if result.get('status') == 'error':
 					if self.server_notifications: control.notification(message=result.get('message'), icon=pm_icon)
 					log_utils.log('Premiumize.me: %s' % response.get('message'), __name__, log_utils.LOGDEBUG)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return False
 
 	def check_cache_list(self, hashList):
 		try:
 			postData = {'items[]': hashList}
-			response = requests.post(cache_check_url, data=postData, headers=self.headers, timeout=10)
+			response = session.post(cache_check_url, data=postData, headers=self.headers, timeout=10)
 			if any(value in response for value in ('500', '502', '504')):
 				log_utils.log('Premiumize.me Service Unavailable: %s' % response, __name__, log_utils.LOGDEBUG)
 			else: response = response.json()
@@ -332,8 +327,7 @@ class Premiumize:
 				if response.get('status') == 'success':
 					response = response.get('response', False)
 					if isinstance(response, list): return response
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return False
 
 	def list_transfer(self):
@@ -344,8 +338,7 @@ class Premiumize:
 			data = {'src': src, 'folder_id': folder_id}
 			log_utils.log('Premiumize.me: Sending MAGNET to cloud: "%s" ' % src, __name__, log_utils.LOGDEBUG)
 			return self._post(transfer_create_url, data)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def clear_finished_transfers(self):
 		try:
@@ -356,8 +349,7 @@ class Premiumize:
 					log_utils.log('Finished transfers successfully cleared from the Premiumize.me cloud', __name__, log_utils.LOGDEBUG)
 					control.refresh()
 					return
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return
 
 	def delete_transfer(self, media_id, folder_name=None, silent=True):
@@ -373,8 +365,7 @@ class Premiumize:
 					log_utils.log('%s successfully deleted from the Premiumize.me cloud' % folder_name, __name__, log_utils.LOGDEBUG)
 					control.refresh()
 					return
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def my_files(self, folder_id=None):
 		try:
@@ -382,17 +373,13 @@ class Premiumize:
 			else: url = folder_list_url
 			response = self._get(url)
 			if response: return response.get('content')
-		except:
-			log_utils.error()
-		return None
+		except: log_utils.error()
 
 	def my_files_all(self):
 		try:
 			response = self._get(item_listall_url)
 			if response: return response.get('files')
-		except:
-			log_utils.error()
-		return None
+		except: log_utils.error()
 
 	def my_files_to_listItem(self, folder_id=None, folder_name=None):
 		try:
@@ -406,9 +393,7 @@ class Premiumize:
 			cloud_files = [i for i in cloud_files if ('link' in i and i['link'].lower().endswith(tuple(extensions))) or i['type'] == 'folder']
 			cloud_files = sorted(cloud_files, key=lambda k: k['name'])
 			cloud_files = sorted(cloud_files, key=lambda k: k['type'], reverse=True)
-		except:
-			log_utils.error()
-			return
+		except: return log_utils.error()
 		folder_str, file_str, downloadMenu, renameMenu, deleteMenu = getLS(40046).upper(), getLS(40047).upper(), getLS(40048), getLS(40049), getLS(40050)
 		for count, item in enumerate(cloud_files, 1):
 			try:
@@ -439,8 +424,7 @@ class Premiumize:
 				item.setArt({'icon': pm_icon, 'poster': pm_icon, 'thumb': pm_icon, 'fanart': addonFanart, 'banner': pm_icon})
 				item.setInfo(type='video', infoLabels='')
 				control.addItem(handle=syshandle, url=url, listitem=item, isFolder=isFolder)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		control.content(syshandle, 'files')
 		control.directory(syshandle, cacheToDisc=True)
 
@@ -448,9 +432,7 @@ class Premiumize:
 		try:
 			response = self._get(transfer_list_url)
 			if response: return response.get('transfers')
-		except:
-			log_utils.error()
-		return None
+		except: log_utils.error()
 
 	def user_transfers_to_listItem(self):
 		try:
@@ -461,9 +443,7 @@ class Premiumize:
 				if self.server_notifications: control.notification(message='Request Failure-Empty Content', icon=pm_icon)
 				log_utils.log('Premiumize.me: Request Failure-Empty Content', __name__, log_utils.LOGDEBUG)
 				return
-		except:
-			log_utils.error()
-			return
+		except: return log_utils.error()
 		folder_str, file_str, downloadMenu, renameMenu, deleteMenu, clearFinishedMenu = getLS(40046).upper(), getLS(40047).upper(), getLS(40048), getLS(40049), getLS(40050), getLS(40051)
 		for count, item in enumerate(transfer_files, 1):
 			try:
@@ -508,8 +488,7 @@ class Premiumize:
 				item.setArt({'icon': pm_icon, 'poster': pm_icon, 'thumb': pm_icon, 'fanart': addonFanart, 'banner': pm_icon})
 				item.setInfo(type='video', infoLabels='')
 				control.addItem(handle=syshandle, url=url, listitem=item, isFolder=isFolder)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		control.content(syshandle, 'files')
 		control.directory(syshandle, cacheToDisc=True)
 
@@ -518,8 +497,7 @@ class Premiumize:
 			data = {'id': item_id}
 			itemDetails = self._post(item_details_url, data)
 			return itemDetails
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return None
 
 	def rename(self, type, folder_id=None, folder_name=None):
@@ -540,8 +518,7 @@ class Premiumize:
 			if not response: return
 			if 'status' in response:
 				if response.get('status') == 'success': control.refresh()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def delete(self, type, folder_id=None, folder_name=None):
 		try:
@@ -553,5 +530,4 @@ class Premiumize:
 			if not response: return
 			if 'status' in response:
 				if response.get('status') == 'success': control.refresh()
-		except:
-			log_utils.error()
+		except: log_utils.error()

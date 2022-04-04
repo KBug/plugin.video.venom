@@ -3,42 +3,46 @@
 	Venom Add-on
 """
 
-from sys import argv
+
+from re import sub as re_sub
 import requests
+from requests.adapters import HTTPAdapter
+from sys import argv
 from urllib.parse import quote_plus
+from urllib3.util.retry import Retry
 from resources.lib.modules import control
 from resources.lib.modules import string_tools
 from resources.lib.modules.source_utils import supported_video_extensions
 
 accepted_extensions = tuple(supported_video_extensions())
 getLS = control.lang
-# getSetting = control.setting
 furk_icon = control.joinPath(control.artPath(), 'furk.png')
 addonFanart = control.addonFanart()
+base_link = "https://www.furk.net/api/"
+account_info_link = "account/info?api_key=%s"
+search_link = "plugins/metasearch?api_key=%s&q=%s&cached=yes" \
+				"&match=%s&moderated=%s%s&sort=relevance&type=video&offset=0&limit=200"
+# search_direct_link = "plugins/metasearch?api_key=%s&q=%s&cached=all" \
+				# "&match=%s&moderated=%s%s&sort=relevance&type=video&offset=0&limit=200"
+file_video_link = "file/get?api_key=%s&type=video"
+file_tfile_link = "file/get?api_key=%s&t_files=1&id=%s"
+
+session = requests.Session()
+retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+session.mount('https://', HTTPAdapter(max_retries=retries, pool_maxsize=100))
 
 
 class Furk:
 	def __init__(self):
-		self.base_link = "https://www.furk.net"
-		self.account_info_link = "/api/account/info?api_key=%s"
-		self.search_link = "/api/plugins/metasearch?api_key=%s&q=%s&cached=yes" \
-								"&match=%s&moderated=%s%s&sort=relevance&type=video&offset=0&limit=200"
-		self.tfile_link = "/api/file/get?api_key=%s&t_files=1&id=%s"
-		self.get_user_files_link = "/api/file/get?api_key=%s&type=video"
-		self.file_info_link = "/api/file/info?api_key%s"
-		self.file_link_link = "/api/file/link?"
-		self.protect_file_link = "/api/file/protect?"
-		self.user_feeds_link = "/api/feed/get?"
-		self.add_download_link = "/api/dl/add?"
+		self.files = []
 		self.api_key = control.setting('furk.api')
 		self.highlight_color = control.getHighlightColor()
-		self.files = []
 
 	def user_files(self):
 		if not self.api_key: return
 		try:
-			url = self.base_link + self.get_user_files_link % self.api_key
-			response = requests.get(url, timeout=20).json()
+			url = base_link + file_video_link % self.api_key
+			response = session.get(url, timeout=20).json()
 			files = response['files']
 		except:
 			from resources.lib.modules import log_utils
@@ -92,10 +96,10 @@ class Furk:
 					# (count, display_res, float(item['size'])/1073741824, str(round(float(item['bitrate'])/1000, 2)), name)
 					# listitem = make_listitem()
 					# listitem.setLabel(display_name)
-					# down_file_params = {'mode': 'downloader', 'name': item['name'], 'url': item['url_dl'], 'action': 'cloud.furk_direct', 'image': default_furk_icon}
+					# down_file_params = {'mode': 'downloader', 'name': item['name'], 'url': item['url_dl'], 'action': 'cloud.furk_direct', 'image': furk_icon}
 					# cm.append((ls(32747),'RunPlugin(%s)' % build_url(down_file_params)))
 					# listitem.addContextMenuItems(cm)
-					# listitem.setArt({'icon': default_furk_icon, 'poster': default_furk_icon, 'thumb': default_furk_icon, 'fanart': fanart, 'banner': default_furk_icon})
+					# listitem.setArt({'icon': furk_icon, 'poster': furk_icon, 'thumb': furk_icon, 'fanart': fanart, 'banner': furk_icon})
 					# yield (url, listitem, False)
 				# except: pass
 		# __handle__ = int(argv[1])
@@ -108,8 +112,7 @@ class Furk:
 	def search(self):
 		from resources.lib.menus import navigator
 		navigator.Navigator().addDirectoryItem(getLS(32603) % self.highlight_color, 'furk_SearchNew', 'search.png', 'DefaultAddonsSearch.png', isFolder=False)
-		try: from sqlite3 import dbapi2 as database
-		except: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		try:
 			if not control.existsPath(control.dataPath): control.makeFile(control.dataPath)
 			dbcon = database.connect(control.searchFile)
@@ -119,7 +122,7 @@ class Furk:
 			dbcur.connection.commit()
 			lst = []
 			delete_option = False
-			for (id, term) in sorted(dbcur.fetchall(), key=lambda k: re.sub(r'(^the |^a |^an )', '', k[1].lower()), reverse=False):
+			for (id, term) in sorted(dbcur.fetchall(), key=lambda k: re_sub(r'(^the |^a |^an )', '', k[1].lower()), reverse=False):
 				if term not in str(lst):
 					delete_option = True
 					navigator.Navigator().addDirectoryItem(term, 'furk_searchResults&query=%s' % term, 'search.png', 'DefaultAddonsSearch.png', isSearch=True, table='furk')
@@ -138,8 +141,7 @@ class Furk:
 		k.doModal()
 		query = k.getText() if k.isConfirmed() else None
 		if not query: return control.closeAll()
-		try: from sqlite3 import dbapi2 as database
-		except: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		try:
 			dbcon = database.connect(control.searchFile)
 			dbcur = dbcon.cursor()
@@ -158,10 +160,10 @@ class Furk:
 		try:
 			downloadMenu = getLS(40048)
 			query = '@name+%s' % query
-			url = (self.base_link + self.search_link % (self.api_key, query, 'extended', 'no', '')).replace(' ', '+')
-			response = requests.get(url, timeout=20).json()
+			url = (base_link + search_link % (self.api_key, query, 'extended', 'no', '')).replace(' ', '+')
+			response = session.get(url, timeout=20).json()
 			if 'files' not in response: # with reuselanguageinvoker on an empty directory must be loaded, do not use sys.exit()
-				control.hide() ; control.notification(title=32001, message=33049)
+				control.hide() ; control.notification(title='Furk', message=33049, icon=furk_icon)
 			try:
 				files = response['files']
 				files.sort(key=lambda k: k['name'])
@@ -197,7 +199,7 @@ class Furk:
 			if context: item.addContextMenuItems(context)
 			item.setArt({'icon': thumb, 'poster': thumb, 'thumb': thumb, 'fanart': addonFanart, 'banner': thumb})
 			item.setInfo(type='video', infoLabels={'plot': name})
-			control.addItem(handle=in(argv[1]), url=url, listitem=item, isFolder=False)
+			control.addItem(handle=int(argv[1]), url=url, listitem=item, isFolder=False)
 		except:
 			from resources.lib.modules import log_utils
 			log_utils.error()
@@ -215,13 +217,14 @@ class Furk:
 
 	def resolve_forPlayback(self, file_id):
 		if not self.api_key: return
+		control.busy()
 		from json import loads as jsloads
+		url = ''
 		try:
-			link = (self.base_link + self.tfile_link % (self.api_key, file_id))
-			s = requests.Session()
-			p = s.get(link)
+			link = (base_link + file_tfile_link % (self.api_key, file_id))
+			p = session.get(link)
 			p = jsloads(p.text)
-			if p['status'] != 'ok' or p['found_files'] != '1': return
+			if p['status'] != 'ok' or p['found_files'] != '1': return control.hide()
 
 			files = p['files'][0]
 			files = files['t_files']
@@ -229,9 +232,11 @@ class Furk:
 			for i in files:
 				if 'video' not in i['ct']: pass
 				else: self.files.append(i)
-
 			for i in self.files:
 				if 'is_largest' in i: url = i['url_dl']
+
+			control.hide()
+			if not url: return control.notification(title='Furk', message=32401, icon=furk_icon)
 			from resources.lib.modules import player
 			return player.Player().play(url)
 		except:
@@ -243,11 +248,11 @@ class Furk:
 		from resources.lib.windows.textviewer import TextViewerXML
 		try:
 			control.busy()
-			url = (self.base_link + self.account_info_link % (self.api_key))
-			account_info = requests.get(url, timeout=20).json()
+			url = (base_link + account_info_link % (self.api_key))
+			account_info = session.get(url, timeout=20).json()
 			if not account_info:
 				control.hide()
-				return control.notification(message=32221, icon=en_icon)
+				return control.notification(message=32221, icon=furk_icon)
 			account_type = account_info['premium']['name']
 			month_time_left = float(account_info['premium']['bw_month_time_left']) / 60 / 60 / 24
 			try: total_time_left = float(account_info['premium']['time_left']) / 60 / 60 / 24

@@ -6,9 +6,8 @@
 from ast import literal_eval
 from hashlib import md5
 from re import sub as re_sub
+from sqlite3 import dbapi2 as db
 from time import time
-try: from sqlite3 import dbapi2 as db
-except ImportError: from pysqlite2 import dbapi2 as db
 from resources.lib.modules import control
 
 

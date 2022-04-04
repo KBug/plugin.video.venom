@@ -6,10 +6,11 @@
 from hashlib import md5
 from json import dumps as jsdumps, loads as jsloads
 from sys import argv, exit as sysexit
-try: from sqlite3 import dbapi2 as database
-except ImportError: from pysqlite2 import dbapi2 as database
+from sqlite3 import dbapi2 as database
 import xbmc
-from resources.lib.database import metacache
+from resources.lib.database.cache import clear_local_bookmarks
+from resources.lib.database.metacache import fetch as fetch_metacache
+from resources.lib.database.traktsync import fetch_bookmarks
 from resources.lib.modules import control
 from resources.lib.modules import log_utils
 from resources.lib.modules import playcount
@@ -61,7 +62,7 @@ class Player(xbmc.Player):
 			else: self.user = str(self.tmdb_key)
 			self.lang = control.apiLanguage()['tvdb']
 			meta1 = dict((k, v) for k, v in iter(meta.items()) if v is not None and v != '') if meta else None
-			meta2 = metacache.fetch([{'imdb': self.imdb, 'tmdb': self.tmdb, 'tvdb': self.tvdb}], self.lang, self.user)[0]
+			meta2 = fetch_metacache([{'imdb': self.imdb, 'tmdb': self.tmdb, 'tvdb': self.tvdb}], self.lang, self.user)[0]
 			if meta2 != self.ids: meta2 = dict((k, v) for k, v in iter(meta2.items()) if v is not None and v != '')
 			if meta1 is not None:
 				try:
@@ -117,8 +118,7 @@ class Player(xbmc.Player):
 				meta.update({'mediatype': 'episode' if self.episode else 'movie'})
 				if self.episode: meta.update({'tvshowtitle': self.title, 'season': self.season, 'episode': self.episode})
 			return (poster, thumb, season_poster, fanart, banner, clearart, clearlogo, discart, meta)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		try:
 			def cleanLibArt(art):
 				from urllib.parse import unquote
@@ -152,8 +152,7 @@ class Player(xbmc.Player):
 				self.DBID = meta.get('movieid')
 			meta = sourcesDirMeta(meta)
 			return (poster, thumb, '', fanart, banner, clearart, clearlogo, discart, meta)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		try:
 			if self.media_type != 'episode': raise Exception()
 			# do not add IMDBNUMBER as tmdb scraper puts their id in the key value
@@ -206,8 +205,7 @@ class Player(xbmc.Player):
 			try:
 				watched_percent = float(current_position) / float(total_length) * 100
 				if watched_percent > 100: watched_percent = 100
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		return watched_percent
 
 	def getRemainingTime(self):
@@ -272,8 +270,7 @@ class Player(xbmc.Player):
 								if remaining_time < (self.playnext_time + 1) and remaining_time != 0:
 									xbmc.executebuiltin('RunPlugin(plugin://plugin.video.venom/?action=play_nextWindowXML)')
 									self.play_next_triggered = True
-					except:
-						log_utils.error()
+					except: log_utils.error()
 					xbmc.sleep(1000)
 
 			except:
@@ -304,8 +301,7 @@ class Player(xbmc.Player):
 			elif self.media_type == 'episode':
 				rpc = '{"jsonrpc": "2.0", "method": "VideoLibrary.SetEpisodeDetails", "params": {"episodeid": %s, "playcount": 1 }, "id": 1 }' % str(self.DBID)
 			control.jsonrpc(rpc)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 ### Kodi player callback methods ###
 	def onAVStarted(self): # Kodi docs suggests "Use onAVStarted() instead of onPlayBackStarted() as of v18"
@@ -316,10 +312,15 @@ class Player(xbmc.Player):
 			else: control.sleep(200)
 		if self.offset != '0' and self.playback_resumed is False:
 			control.sleep(200)
-			self.seekTime(float(self.offset))
+			if getSetting('trakt.scrobble') == 'true' and getSetting('resume.source') == '1': # re-adjust the resume point since dialog is based on meta runtime vs. getTotalTime() and inaccurate
+				try:
+					total_time = self.getTotalTime()
+					progress = float(fetch_bookmarks(self.imdb, self.tmdb, self.tvdb, self.season, self.episode))
+					self.offset = (progress / 100) * total_time
+				except: pass
+			self.seekTime(self.offset)
 			self.playback_resumed = True
-		if getSetting('subtitles') == 'true':
-			Subtitles().get(self.name, self.imdb, self.season, self.episode)
+		if getSetting('subtitles') == 'true': Subtitles().get(self.name, self.imdb, self.season, self.episode)
 		xbmc.log('[ plugin.video.venom ] onAVStarted callback', LOGINFO)
 		log_utils.log('[ plugin.video.venom ] onAVStarted callback', level=log_utils.LOGDEBUG)
 
@@ -336,9 +337,7 @@ class Player(xbmc.Player):
 		try:
 			playerWindow.clearProperty('venom.preResolved_nextUrl')
 			playerWindow.clearProperty('venom.playlistStart_position')
-
-			from resources.lib.database import cache
-			cache.clear_local_bookmarks() # clear all venom bookmarks from kodi database
+			clear_local_bookmarks() # clear all venom bookmarks from kodi database
 
 			if not self.onPlayBackStopped_ran or (self.playbackStopped_triggered and not self.onPlayBackStopped_ran): # Kodi callback unreliable and often not issued
 				self.onPlayBackStopped_ran = True
@@ -354,13 +353,12 @@ class Player(xbmc.Player):
 				# control.trigger_widget_refresh() # skinshortcuts handles widget refresh
 				xbmc.log('[ plugin.video.venom ] onPlayBackStopped callback', LOGINFO)
 				log_utils.log('[ plugin.video.venom ] onPlayBackStopped callback', level=log_utils.LOGDEBUG)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def onPlayBackEnded(self):
 		Bookmarks().reset(self.current_time, self.media_length, self.name, self.year)
 		if self.traktCredentials:
-			trakt.scrobbleReset(imdb=self.imdb, tvdb=self.tvdb, season=self.season, episode=self.episode, refresh=False) # refresh issues container.refresh()
+			trakt.scrobbleReset(imdb=self.imdb, tmdb=self.tmdb, tvdb=self.tvdb, season=self.season, episode=self.episode, refresh=False) # refresh issues container.refresh()
 		self.libForPlayback()
 		if control.playlist.getposition() == control.playlist.size() or control.playlist.size() == 1:
 			control.playlist.clear()
@@ -481,8 +479,7 @@ class Subtitles:
 			from io import BytesIO
 			import re, base64
 			import xmlrpc.client as xmlrpc_client
-		except:
-			return log_utils.error()
+		except: return log_utils.error()
 		try:
 			langDict = {'Afrikaans': 'afr', 'Albanian': 'alb', 'Arabic': 'ara', 'Armenian': 'arm', 'Basque': 'baq', 'Bengali': 'ben',
 			'Bosnian': 'bos', 'Breton': 'bre', 'Bulgarian': 'bul', 'Burmese': 'bur', 'Catalan': 'cat', 'Chinese': 'chi', 'Croatian': 'hrv',
@@ -514,8 +511,7 @@ class Subtitles:
 				subLangs = xbmc.Player().getAvailableSubtitleStreams()
 				if 'gre' in subLangs: subLangs[subLangs.index('gre')] = 'ell'
 				subLang = [i for i in subLangs if i == langs[0]][0]
-			except:
-				subLangs = subLang = ''
+			except: subLangs = subLang = ''
 			if subLangs and subLang == langs[0]:
 				control.sleep(1000)
 				xbmc.Player().setSubtitleStream(subLangs.index(subLang))
@@ -549,6 +545,7 @@ class Subtitles:
 				filter += [i for i in result if i['SubLanguageID'] == lang and any(x in i['MovieReleaseName'].lower() for x in fmt)]
 				filter += [i for i in result if i['SubLanguageID'] == lang and any(x in i['MovieReleaseName'].lower() for x in quality)]
 				filter += [i for i in result if i['SubLanguageID'] == lang]
+			if not filter: return control.notification(message=getLS(32395))
 
 			try: lang = xbmc.convertLanguage(filter[0]['SubLanguageID'], xbmc.ISO_639_1)
 			except: lang = filter[0]['SubLanguageID']
@@ -580,8 +577,7 @@ class Subtitles:
 				if Player().isPlayback():
 					control.sleep(500)
 					control.notification(title=filename, message=getLS(32191) % lang.upper())
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 
 class Bookmarks:
@@ -593,9 +589,8 @@ class Bookmarks:
 			scrobbble = 'Trakt Scrobble'
 			try:
 				if not runtime or runtime == 'None': return offset # TMDB sometimes return None as string. duration pulled from kodi library if missing from meta
-				from resources.lib.database import traktsync
-				progress = float(traktsync.fetch_bookmarks(imdb, tmdb, tvdb, season, episode))
-				offset = float(progress / 100) * int(float(runtime)) # runtime vs. media_length can differ resulting in 10-30sec difference using Trakt scrobble, meta providers report runtime in full minutes
+				progress = float(fetch_bookmarks(imdb, tmdb, tvdb, season, episode))
+				offset = (progress / 100) * runtime # runtime vs. media_length can differ resulting in 10-30sec difference using Trakt scrobble, meta providers report runtime in full minutes
 				seekable = (2 <= progress <= 85)
 				if not seekable: return '0'
 			except:
@@ -629,8 +624,7 @@ class Bookmarks:
 
 	def reset(self, current_time, media_length, name, year='0'):
 		try:
-			from resources.lib.database import cache
-			cache.clear_local_bookmarks() # clear all venom bookmarks from kodi database
+			clear_local_bookmarks() # clear all venom bookmarks from kodi database
 			if getSetting('bookmarks') != 'true' or media_length == 0 or current_time == 0: return
 			timeInSeconds = str(current_time)
 			seekable = (int(current_time) > 180 and (current_time / media_length) < .85)
@@ -664,9 +658,7 @@ class Bookmarks:
 			if media_length == 0: return
 			percent = float((current_time / media_length)) * 100
 			seekable = (int(current_time) > 180 and (percent < 85))
-			if seekable:
-				trakt.scrobbleMovie(imdb, tmdb, percent) if media_type == 'movie' else trakt.scrobbleEpisode(imdb, tmdb, tvdb, season, episode, percent)
-			if percent >= 85:
-				trakt.scrobbleReset(imdb, tvdb, season, episode, refresh=False)
+			if seekable: trakt.scrobbleMovie(imdb, tmdb, percent) if media_type == 'movie' else trakt.scrobbleEpisode(imdb, tmdb, tvdb, season, episode, percent)
+			if percent >= 85: trakt.scrobbleReset(imdb, tmdb, tvdb, season, episode, refresh=False)
 		except:
 			log_utils.error()

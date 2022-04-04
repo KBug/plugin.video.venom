@@ -82,7 +82,7 @@ class TraktWatchlistManagerXML(BaseDialog):
 					listitem.setProperty('venom.imdb', item.get('imdb'))
 					listitem.setProperty('venom.tmdb', item.get('tmdb'))
 					listitem.setProperty('venom.trakt', item.get('trakt'))
-					listitem.setProperty('venom.rating', str(round(float(item.get('rating')), 1)))
+					listitem.setProperty('venom.rating', str(round(float(item.get('rating', '0')), 1)))
 					listitem.setProperty('venom.trailer', item.get('trailer'))
 					listitem.setProperty('venom.studio', item.get('studio'))
 					listitem.setProperty('venom.genre', item.get('genre', ''))

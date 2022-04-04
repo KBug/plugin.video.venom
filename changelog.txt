@@ -1,4 +1,12 @@
 
+[B][COLOR red]Update - v6.5.5 - April 04, 2022[/COLOR][/B]
+[COLOR yellow]--[/COLOR][I] using [B]"Scrobble Reset"[/B] will no longer show title on [B]"Trakt"[/B] or [B]"Trakt Playback Progress Manager"[/B] web site as [B]"Currently Watching"[/B].[/I]
+[COLOR yellow]--[/COLOR][I] Fixed issue in trakt scrobble for playback progress/resume point being variably off in the seek value used vs. true stop point of video. [/I]
+[COLOR yellow]--[/COLOR][I] Fixed issue with Downloader Error capturing.[/I]
+[COLOR yellow]--[/COLOR][I] Fixed all cloud scrapers not pulling "SxEPxx" formatted episode titles.[/I]
+[COLOR yellow]--[/COLOR][I] Trakt module request, post, and delete methods re-written for performance improvements.[/I]
+
+
 [B][COLOR red]Update - v6.5.4 - March 21, 2022[/COLOR][/B]
 [COLOR yellow]--[/COLOR][I] Added Setting under General category to select [B]"TMDb image resolutions"[/B], options are "low, medium, high, and original".[/I]
 [COLOR yellow]--[/COLOR][I] Fixed [B]"Select All"[/B] button in many [B]"Trakt Management Tools"[/B] menus.  The option was not returning the array of selected items so it did nothing.[/I]

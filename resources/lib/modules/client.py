@@ -59,8 +59,7 @@ def request(url, close=True, redirect=True, error=False, proxy=None, post=None, 
 				try:
 					import _ssl
 					CERT_NONE = _ssl.CERT_NONE
-				except:
-					CERT_NONE = ssl.CERT_NONE
+				except: CERT_NONE = ssl.CERT_NONE
 				ssl_context = ssl.create_default_context()
 				ssl_context.check_hostname = False
 				ssl_context.verify_mode = CERT_NONE
@@ -140,8 +139,7 @@ def request(url, close=True, redirect=True, error=False, proxy=None, post=None, 
 							if response.status_code == 403: # if cfscrape server still responds with 403
 								log_utils.log('cfscrape-Error url=(%s): %s' % (url, 'HTTP Error 403: Forbidden'), __name__, level=log_utils.LOGDEBUG)
 								return None
-						except:
-							log_utils.error()
+						except: log_utils.error()
 					elif 'cf-browser-verification' in str(cf_result):
 						netloc = '%s://%s' % (urlparse(url).scheme, urlparse(url).netloc)
 						ua = headers['User-Agent']

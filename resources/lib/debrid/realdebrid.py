@@ -5,8 +5,9 @@
 
 import re
 import requests
+from requests.adapters import HTTPAdapter
 from sys import argv, exit as sysexit
-from threading import Thread
+from urllib3.util.retry import Retry
 from urllib.parse import quote_plus
 from resources.lib.database import cache
 from resources.lib.modules import control
@@ -35,6 +36,10 @@ hosts_regex_url = 'hosts/regex'
 rd_icon = control.joinPath(control.artPath(), 'realdebrid.png')
 addonFanart = control.addonFanart()
 
+session = requests.Session()
+retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+session.mount('https://api.real-debrid.com', HTTPAdapter(max_retries=retries, pool_maxsize=100))
+
 
 class RealDebrid:
 	name = "Real-Debrid"
@@ -54,18 +59,20 @@ class RealDebrid:
 		self.store_to_cloud = getSetting('realdebrid.saveToCloud') == 'true'
 
 	def _get(self, url, fail_check=False, token_ck=False):
+		response = None
 		try:
-			original_url = url
-			url = rest_base_url + url
 			if self.token == '':
 				log_utils.log('No Real-Debrid Token Found')
 				return None
+			original_url = url
+			url = rest_base_url + url
+
 			# if not fail_check: # with fail_check=True new token does not get added
 			if '?' not in url:
 				url += "?auth_token=%s" % self.token
 			else:
 				url += "&auth_token=%s" % self.token
-			response = requests.get(url, timeout=45) # cache checkiing of show packs results in random timeout at 30
+			response = session.get(url, timeout=45) # cache checkiing of show packs results in random timeout at 30
 			if 'Temporarily Down For Maintenance' in response.text:
 				if self.server_notifications: control.notification(message='Real-Debrid Temporarily Down For Maintenance', icon=rd_icon)
 				log_utils.log('Real-Debrid Temporarily Down For Maintenance', level=log_utils.LOGWARNING)
@@ -76,9 +83,12 @@ class RealDebrid:
 					if self.refresh_token() and token_ck: return
 					response = self._get(original_url, fail_check=True)
 			return response
-		except:
+		except requests.exceptions.ConnectionError:
+			if self.server_notifications: control.notification(message='Failed to connect to Real-Debrid', icon=rd_icon)
+			log_utils.log('Failed to connect to Real-Debrid', __name__, log_utils.LOGWARNING)
+		except BaseException:
 			log_utils.error()
-		return None
+		return response
 
 	def _post(self, url, data):
 		try:
@@ -91,7 +101,7 @@ class RealDebrid:
 				url += "?auth_token=%s" % self.token
 			else:
 				url += "&auth_token=%s" % self.token
-			response = requests.post(url, data=data, timeout=15)
+			response = session.post(url, data=data, timeout=15)
 			if '[204]' in str(response): return None
 			if 'Temporarily Down For Maintenance' in response.text:
 				if self.server_notifications: control.notification(message='Real-Debrid Temporarily Down For Maintenance', icon=rd_icon)
@@ -108,15 +118,13 @@ class RealDebrid:
 				log_utils.log('Real-Debrid Error:  %s' % message, log_utils.LOGWARNING)
 				return None
 			return response
-		except:
-			log_utils.error()
-		return None
+		except: log_utils.error()
 
 	def auth_loop(self):
 		control.sleep(self.auth_step*1000)
 		url = 'client_id=%s&code=%s' % (self.client_ID, self.device_code)
 		url = oauth_base_url + credentials_url % url
-		response = requests.get(url)
+		response = session.get(url)
 		if 'error' in response.text:
 			return control.okDialog(title='default', message=40019)
 		else:
@@ -135,7 +143,7 @@ class RealDebrid:
 		self.client_ID = 'X245A4XAIBGVM'
 		url = 'client_id=%s&new_credentials=yes' % self.client_ID
 		url = oauth_base_url + device_code_url % url
-		response = requests.get(url).json()
+		response = session.get(url).json()
 		line = '%s\n%s'
 		progressDialog = control.progressDialog
 		progressDialog.create(getLS(40055))
@@ -169,16 +177,13 @@ class RealDebrid:
 			items += [getLS(40042) % days_remaining]
 			items += [getLS(40038) % userInfo['points']]
 			return control.selectDialog(items, 'Real-Debrid')
-		except:
-			log_utils.error()
-		return
+		except: log_utils.error()
 
 	def user_torrents(self):
 		try:
 			url = 'torrents'
 			return self._get(url)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def user_torrents_to_listItem(self):
 		try:
@@ -202,12 +207,10 @@ class RealDebrid:
 					item.setArt({'icon': rd_icon, 'poster': rd_icon, 'thumb': rd_icon, 'fanart': addonFanart, 'banner': rd_icon})
 					item.setInfo(type='video', infoLabels='')
 					control.addItem(handle=syshandle, url=url, listitem=item, isFolder=isFolder)
-				except:
-					log_utils.error()
+				except: log_utils.error()
 			control.content(syshandle, 'files')
 			control.directory(syshandle, cacheToDisc=True)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def browse_user_torrents(self, folder_id):
 		try:
@@ -248,8 +251,7 @@ class RealDebrid:
 				item.setArt({'icon': rd_icon, 'poster': rd_icon, 'thumb': rd_icon, 'fanart': addonFanart, 'banner': rd_icon})
 				item.setInfo(type='video', infoLabels='')
 				control.addItem(handle=syshandle, url=url, listitem=item, isFolder=False)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		control.content(syshandle, 'files')
 		control.directory(syshandle, cacheToDisc=True)
 
@@ -258,7 +260,7 @@ class RealDebrid:
 			if not control.yesnoDialog(getLS(40050) % '?\n' + name, '', ''): return
 			ck_token = self._get('user', token_ck=True) # check token, and refresh if needed
 			url = torrents_delete_url + "/%s&auth_token=%s" % (media_id, self.token)
-			response = requests.delete(rest_base_url + url)
+			response = session.delete(rest_base_url + url)
 			if not 'error' in response:
 				if self.server_notifications: control.notification(message='Real-Debrid: %s was removed from your active Torrents' % name, icon=rd_icon)
 				log_utils.log('Real-Debrid: %s was removed from your active Torrents' % name, __name__, log_utils.LOGDEBUG)
@@ -272,12 +274,11 @@ class RealDebrid:
 		try:
 			ck_token = self._get('user', token_ck=True) # check token, and refresh if needed
 			url = 'downloads?page=%s&auth_token=%s' % (page, self.token)
-			response = requests.get(rest_base_url + url)
+			response = session.get(rest_base_url + url)
 			total_count = float(response.headers['X-Total-Count'])
 			pages = int(math.ceil(total_count / 50.0))
 			return response.json(), pages
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def my_downloads_to_listItem(self, page):
 		try:
@@ -308,8 +309,7 @@ class RealDebrid:
 				item.setArt({'icon': rd_icon, 'poster': rd_icon, 'thumb': rd_icon, 'fanart': addonFanart, 'banner': rd_icon})
 				item.setInfo(type='video', infoLabels='')
 				control.addItem(handle=syshandle, url=url, listitem=item, isFolder=False)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		if page < pages:
 			page += 1
 			next = True
@@ -324,8 +324,7 @@ class RealDebrid:
 				icon = control.addonNext()
 				item.setArt({'icon': rd_icon, 'poster': rd_icon, 'thumb': rd_icon, 'fanart': addonFanart, 'banner': rd_icon})
 				control.addItem(handle=syshandle, url=url, listitem=item, isFolder=True)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		control.content(syshandle, 'files')
 		control.directory(syshandle, cacheToDisc=True)
 
@@ -334,13 +333,12 @@ class RealDebrid:
 			if not control.yesnoDialog(getLS(40050) % '?\n' + name, '', ''): return
 			ck_token = self._get('user', token_ck=True) # check token, and refresh if needed
 			url = downloads_delete_url + "/%s&auth_token=%s" % (media_id, self.token)
-			response = requests.delete(rest_base_url + url)
+			response = session.delete(rest_base_url + url)
 			if not 'error' in response:
 				if self.server_notifications: control.notification(message='Real-Debrid: %s was removed from your MyDownloads' % name, icon=rd_icon)
 				log_utils.log('Real-Debrid: %s was removed from your MyDownloads' % name, __name__, log_utils.LOGDEBUG)
 				control.refresh()
-		except:
-			log_utils.error('Real-Debrid Error: DELETE DOWNLOAD %s : ' % name)
+		except: log_utils.error('Real-Debrid Error: DELETE DOWNLOAD %s : ' % name)
 
 	def check_cache(self, hashList):
 		if isinstance(hashList, list): hashString = '/' + '/'.join(hashList)
@@ -357,9 +355,9 @@ class RealDebrid:
 			extras_filtering_list = extras_filter()
 			info_hash = info_hash.lower()
 			torrent_files = self._get(check_cache_url + '/' + info_hash)
-			# log_utils.log('torrent_files = %s' % torrent_files)
+			# log_utils.log('torrent_files = %s' % torrent_files, __name__)
 			if not torrent_files: return log_utils.log('Real-Debrid: Error RESOLVE MAGNET "%s" : (Server Failed to respond)' % magnet_url, __name__, log_utils.LOGWARNING)
-			if not info_hash in torrent_files: return None
+			if info_hash not in torrent_files: return log_utils.log('Real-Debrid: Error RESOLVE MAGNET "%s" : (info_hash no longer cached)' % magnet_url, __name__, log_utils.LOGWARNING)
 			torrent_id = self.add_magnet(magnet_url) # add_magent() returns id
 			torrent_files = torrent_files[info_hash]['rd']
 			if not torrent_files: failed_reason = 'magnet is no longer cached'
@@ -394,13 +392,13 @@ class RealDebrid:
 							if any(x in filename_info for x in extras_filtering_list): continue
 							# break
 					torrent_keys = item.keys()
-					# log_utils.log('torrent_keys = %s' % torrent_keys)
+					# log_utils.log('torrent_keys = %s' % torrent_keys, __name__)
 					if len(torrent_keys) == 0: continue
 					torrent_keys = ','.join(torrent_keys)
 					self.add_torrent_select(torrent_id, torrent_keys)
 					torrent_info = self.torrent_info(torrent_id)
-					# log_utils.log('torrent_info = %s' % torrent_info)
-					# log_utils.log('torrent_info[links]: = %s' %  torrent_info['links'])
+					# log_utils.log('torrent_info = %s' % torrent_info, __name__)
+					# log_utils.log('torrent_info[links]: = %s' %  torrent_info['links'], __name__)
 					######################################
 					# check here if no "links" in result
 					if not torrent_info['links']:
@@ -409,7 +407,7 @@ class RealDebrid:
 					######################################
 					if 'error' in torrent_info: continue
 					selected_files = [(idx, i) for idx, i in enumerate([i for i in torrent_info['files'] if i['selected'] == 1])]
-					# log_utils.log('selected_files = %s' % selected_files)
+					# log_utils.log('selected_files = %s' % selected_files, __name__)
 					if season:
 						correct_files = []
 						append = correct_files.append
@@ -417,7 +415,7 @@ class RealDebrid:
 						for value in selected_files:
 							correct_file_check = seas_ep_filter(season, episode, value[1]['path'])
 							if correct_file_check:
-								# log_utils.log('value = %s' % str(value))
+								# log_utils.log('value = %s' % str(value), __name__)
 								append(value[1])
 								break
 							else: failed_reason = 'no matching season/episode found'
@@ -444,13 +442,12 @@ class RealDebrid:
 							match, index = True, value[0]
 							break
 						if match: break
-				except:
-					log_utils.error()
+				except: log_utils.error()
 			if match:
 				rd_link = torrent_info['links'][index]
 				file_url = self.unrestrict_link(rd_link)
 				if file_url.endswith('rar'):
-					file_url, failed_reason = None, 'RD returned unsupported .rar file --> %s' % file__url
+					file_url, failed_reason = None, 'RD returned unsupported .rar file --> %s' % file_url
 				if not any(file_url.lower().endswith(x) for x in extensions):
 					file_url, failed_reason = None, 'RD returned unsupported file extension --> %s' % file_url
 				if not self.store_to_cloud: self.delete_torrent(torrent_id)
@@ -612,9 +609,7 @@ class RealDebrid:
 		try:
 			url = torrents_info_url + "/%s" % torrent_id
 			return self._get(url)
-		except:
-			log_utils.error('Real-Debrid Error: TORRENT INFO %s : ' % torrent_id)
-			return None
+		except: log_utils.error('Real-Debrid Error: TORRENT INFO %s : ' % torrent_id)
 
 	def add_magnet(self, magnet):
 		try:
@@ -622,18 +617,14 @@ class RealDebrid:
 			response = self._post(add_magnet_url, data)
 			log_utils.log('Real-Debrid: Sending MAGNET to cloud: %s' % magnet, __name__, log_utils.LOGDEBUG)
 			return response.get('id', "")
-		except:
-			log_utils.error('Real-Debrid Error: ADD MAGNET to cloud%s : ' % magnet)
-			return None
+		except: log_utils.error('Real-Debrid Error: ADD MAGNET to cloud%s : ' % magnet)
 
 	def add_torrent_select(self, torrent_id, file_ids):
 		try:
 			url = '%s/%s' % (select_files_url, torrent_id)
 			data = {'files': file_ids}
 			return self._post(url, data)
-		except:
-			log_utils.error('Real-Debrid Error: ADD SELECT FILES %s : ' % torrent_id)
-			return None
+		except: log_utils.error('Real-Debrid Error: ADD SELECT FILES %s : ' % torrent_id)
 
 	# def add_torrent_select(self, torrent_id, file_ids=None):
 		# try:
@@ -646,9 +637,7 @@ class RealDebrid:
 				# file_ids = ','.join(file_ids)
 			# data = {'files': file_ids}
 			# return self._post(url, data)
-		# except:
-			# log_utils.error('Real-Debrid Error: ADD SELECT FILES %s : ' % torrent_id)
-			# return None
+		# except: log_utils.error('Real-Debrid Error: ADD SELECT FILES %s : ' % torrent_id)
 
 	def create_transfer(self, magnet_url):
 		try:
@@ -675,11 +664,10 @@ class RealDebrid:
 		try:
 			ck_token = self._get('user', token_ck=True) # check token, and refresh if needed
 			url = torrents_delete_url + "/%s&auth_token=%s" % (torrent_id, self.token)
-			response = requests.delete(rest_base_url + url)
+			response = session.delete(rest_base_url + url)
 			if not 'error' in response:
 				log_utils.log('Real-Debrid: Torrent ID %s was removed from your active torrents' % torrent_id, __name__, log_utils.LOGDEBUG)
-		except:
-			log_utils.error('Real-Debrid Error: DELETE TORRENT %s : ')
+		except: log_utils.error('Real-Debrid Error: DELETE TORRENT %s : ')
 
 	def get_link(self, link):
 		if 'download' in link:
@@ -714,16 +702,14 @@ class RealDebrid:
 		return [i[0] for i in sorted_list]
 
 	def get_aliases(self, title): # no longer used atm
-		try: from sqlite3 import dbapi2 as database
-		except ImportError: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		aliases = []
 		try:
 			dbcon = database.connect(control.providercacheFile, timeout=60)
 			dbcur = dbcon.cursor()
 			fetch = dbcur.execute('''SELECT * FROM rel_aliases WHERE title=?''', (title,)).fetchone()
 			aliases = eval(fetch[1])
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return aliases
 
 	def valid_url(self, host):
@@ -732,16 +718,14 @@ class RealDebrid:
 			if not self.hosts['Real-Debrid']: return False
 			if any(host in item for item in self.hosts['Real-Debrid']): return True
 			return False
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def get_hosts(self):
 		hosts_dict = {'Real-Debrid': []}
 		try:
 			result = cache.get(self._get, 168, hosts_domains_url)
 			hosts_dict['Real-Debrid'] = result
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return hosts_dict
 
 	def get_hosts_regex(self):
@@ -749,8 +733,7 @@ class RealDebrid:
 		try:
 			result = cache.get(self._get, 168, hosts_regex_url)
 			hosts_regexDict['Real-Debrid'] = result
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return hosts_regexDict
 
 	def refresh_token(self):
@@ -779,7 +762,7 @@ class RealDebrid:
 		try:
 			url = oauth_base_url + 'token'
 			postData = {'client_id': self.client_ID, 'client_secret': self.secret, 'code': self.device_code, 'grant_type': 'http://oauth.net/grant_type/device/1.0'}
-			response = requests.post(url, data=postData)
+			response = session.post(url, data=postData)
 			# log_utils.log('Authorizing Real Debrid Result: | %s |' % response, level=log_utils.LOGDEBUG)
 			if '[204]' in str(response): return False, str(response)
 			if 'Temporarily Down For Maintenance' in response.text:
@@ -817,5 +800,4 @@ class RealDebrid:
 			control.setSetting('realdebrid.refresh', '')
 			control.setSetting('realdebrid.username', '')
 			control.dialog.ok(getLS(40058), getLS(32320))
-		except:
-			log_utils.error()
+		except: log_utils.error()

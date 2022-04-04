@@ -4,7 +4,7 @@
 """
 
 from datetime import datetime, timedelta
-from json import dumps as jsdumps, loads as jsloads
+from json import dumps as jsdumps
 import re
 from threading import Thread
 from urllib.parse import quote_plus, urlencode, parse_qsl, urlparse, urlsplit
@@ -164,11 +164,9 @@ class Movies:
 			try: u = urlparse(url).netloc.lower()
 			except: pass
 			if u in self.tmdb_link and '/list/' in url:
-				# self.list = tmdb_indexer.Movies().tmdb_collections_list(url) # caching handled in list indexer
 				self.list = tmdb_indexer().tmdb_collections_list(url) # caching handled in list indexer
 				self.sort()
 			elif u in self.tmdb_link and '/list/' not in url:
-				# self.list = tmdb_indexer.Movies().tmdb_list(url) # caching handled in list indexer
 				self.list = tmdb_indexer().tmdb_list(url) # caching handled in list indexer
 			if self.list is None: self.list = []
 			if create_directory: self.movieDirectory(self.list)
@@ -338,8 +336,7 @@ class Movies:
 	def search(self):
 		from resources.lib.menus import navigator
 		navigator.Navigator().addDirectoryItem(getLS(32603) % self.highlight_color, 'movieSearchnew', 'search.png', 'DefaultAddonsSearch.png', isFolder=False)
-		try: from sqlite3 import dbapi2 as database
-		except ImportError: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		try:
 			if not control.existsPath(control.dataPath): control.makeFile(control.dataPath)
 			dbcon = database.connect(control.searchFile)
@@ -367,8 +364,7 @@ class Movies:
 		k.doModal()
 		q = k.getText() if k.isConfirmed() else None
 		if not q: return control.closeAll()
-		try: from sqlite3 import dbapi2 as database
-		except ImportError: from pysqlite2 import dbapi2 as database
+		from sqlite3 import dbapi2 as database
 		try:
 			dbcon = database.connect(control.searchFile)
 			dbcur = dbcon.cursor()
@@ -714,8 +710,7 @@ class Movies:
 
 	def trakt_public_list(self, url):
 		try:
-			result = trakt.getTrakt(url)
-			items = jsloads(result)
+			items = trakt.getTrakt(url).json()
 		except:
 			from resources.lib.modules import log_utils
 			log_utils.error()
@@ -916,7 +911,7 @@ class Movies:
 			if not tmdb: return
 			# movie_meta = tmdb_indexer.Movies().get_movie_meta(tmdb)
 			movie_meta = tmdb_indexer().get_movie_meta(tmdb)
-			if not movie_meta or '404:NOT FOUND' in movie_meta: return # trakt search turns up alot of junk with wrong tmdb_id's
+			if not movie_meta or '404:NOT FOUND' in movie_meta: return # trakt search turns up alot of junk with wrong tmdb_id's causing 404's
 			values = {}
 			values.update(movie_meta)
 			if 'rating' in self.list[i] and self.list[i]['rating']: values['rating'] = self.list[i]['rating'] # prefer imdb,trakt rating and votes if set
@@ -1051,13 +1046,15 @@ class Movies:
 				item.setUniqueIDs({'imdb': imdb, 'tmdb': tmdb})
 				item.setProperty('IsPlayable', 'true')
 				if is_widget: item.setProperty('isVenom_widget', 'true')
-				resumetime = Bookmarks().get(name=label, imdb=imdb, tmdb=tmdb, year=str(year), runtime=runtime, ck=True)
-				# item.setProperty('TotalTime', str(meta['duration'])) # Adding this property causes the Kodi bookmark CM items to be added
-				item.setProperty('ResumeTime', str(resumetime))
-				try:
-					watched_percent = round(float(resumetime) / float(runtime) * 100, 1) # resumetime and runtime are both in seconds
-					item.setProperty('PercentPlayed', str(watched_percent))
-				except: pass
+				if self.unairedcolor not in labelProgress:
+					resumetime = Bookmarks().get(name=label, imdb=imdb, tmdb=tmdb, year=str(year), runtime=runtime, ck=True)
+					# item.setProperty('TotalTime', str(meta['duration'])) # Adding this property causes the Kodi bookmark CM items to be added
+					item.setProperty('ResumeTime', str(resumetime))
+					try:
+						watched_percent = round(float(resumetime) / float(runtime) * 100, 1) # resumetime and runtime are both in seconds
+						item.setProperty('PercentPlayed', str(watched_percent))
+					except: pass
+
 				item.setInfo(type='video', infoLabels=control.metadataClean(meta))
 				item.addContextMenuItems(cm)
 				control.addItem(handle=syshandle, url=url, listitem=item, isFolder=False)

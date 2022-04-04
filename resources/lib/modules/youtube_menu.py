@@ -52,7 +52,7 @@ class youtube_menu(object):
 			url = 'plugin://plugin.video.venom/?action=sectionItem'
 			liz = ListItem(label=name, offscreen=True)
 			liz.setArt({'icon': 'DefaultFolder.png', 'thumb': iconimage, 'fanart': fanart})
-			liz.setInfo(type='video', infoLabels={'title': name, 'plot': description})
+			liz.setInfo(type='video', infoLabels={'title': name})
 			addDirectoryItem(handle=int(argv[1]), url=url, listitem=liz, isFolder=False)
 		except:
 			from resources.lib.modules import log_utils

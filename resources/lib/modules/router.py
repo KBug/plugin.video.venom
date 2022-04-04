@@ -614,7 +614,8 @@ def router(params):
 				from resources.lib.debrid import alldebrid
 				if params.get('type') == 'unrestrict': control.player.play(alldebrid.AllDebrid().unrestrict_link(url.replace(' ', '%20')))
 				else: control.player.play(url.replace(' ', '%20'))
-			else: control.player.play(url.replace(' ', '%20'))
+			else:
+				control.player.play(url.replace(' ', '%20'))
 		elif action == 'play_EpisodesList': # global context option
 			from json import dumps as jsdumps
 			from resources.lib.menus import episodes
@@ -682,8 +683,7 @@ def router(params):
 					try: control.notification(title=32536, message='%s - %01dx%02d - %s' % (rlist[rand]['tvshowtitle'], int(rlist[rand]['season']), int(rlist[rand]['episode']), rlist[rand]['title']))
 					except: pass
 				control.execute('RunPlugin(%s)' % r)
-			except:
-				control.notification(message=32537)
+			except: control.notification(message=32537)
 
 	elif action == 'play': # for support of old style .strm library files
 		from resources.lib.modules import sources

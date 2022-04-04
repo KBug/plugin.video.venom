@@ -6,7 +6,9 @@
 from json import dumps as jsdumps, loads as jsloads
 import re
 import requests
+from requests.adapters import HTTPAdapter
 from sys import argv, exit as sysexit
+from urllib3.util.retry import Retry
 from urllib.parse import quote_plus
 from resources.lib.database import cache
 from resources.lib.modules import control
@@ -17,10 +19,14 @@ from resources.lib.modules.source_utils import supported_video_extensions
 getLS = control.lang
 getSetting = control.setting
 base_url = 'https://api.alldebrid.com/v4/'
-user_agent = 'Venom%20for%20Kodi'
+user_agent = 'Venom_for_Kodi'
 ad_icon = control.joinPath(control.artPath(), 'alldebrid.png')
 addonFanart = control.addonFanart()
 invalid_extensions = ('.bmp', '.gif', '.jpg', '.nfo', '.part', '.png', '.rar', '.sample.', '.srt', '.txt', '.zip')
+
+session = requests.Session()
+retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+session.mount('https://api.alldebrid.com', HTTPAdapter(max_retries=retries, pool_maxsize=100))
 
 
 class AllDebrid:
@@ -28,16 +34,18 @@ class AllDebrid:
 	sort_priority = getSetting('alldebrid.priority')
 	def __init__(self):
 		self.token = getSetting('alldebrid.token')
-		self.timeout = 15
+		self.timeout = 20
 		self.server_notifications = getSetting('alldebrid.server.notifications')
 		self.store_to_cloud = getSetting('alldebrid.saveToCloud') == 'true'
 
 	def _get(self, url, url_append=''):
 		response = None
 		try:
-			if self.token == '': return None
+			if self.token == '':
+				log_utils.log('No Real-Debrid Token Found')
+				return None
 			url = base_url + url + '?agent=%s&apikey=%s' % (user_agent, self.token) + url_append
-			response = requests.get(url, timeout=self.timeout)
+			response = session.get(url, timeout=self.timeout)
 			if 'Response [500]' in str(response):
 				log_utils.log('AllDebrid: Status code 500 – Internal Server Error', __name__, log_utils.LOGWARNING)
 				return None
@@ -64,7 +72,7 @@ class AllDebrid:
 		try:
 			if self.token == '': return None
 			url = base_url + url + '?agent=%s&apikey=%s' % (user_agent, self.token)
-			response = requests.post(url, data=data, timeout=self.timeout)
+			response = session.post(url, data=data, timeout=self.timeout)
 			if 'Response [500]' in str(response):
 				log_utils.log('AllDebrid: Status code 500 – Internal Server Error', __name__, log_utils.LOGWARNING)
 				return None
@@ -88,7 +96,7 @@ class AllDebrid:
 
 	def auth_loop(self):
 		control.sleep(5000)
-		response = requests.get(self.check_url, timeout=self.timeout).json()
+		response = session.get(self.check_url, timeout=self.timeout).json()
 		response = response['data']
 		if 'error' in response:
 			self.token = 'failed'
@@ -110,7 +118,7 @@ class AllDebrid:
 	def auth(self):
 		self.token = ''
 		url = base_url + 'pin/get?agent=%s' % user_agent
-		response = requests.get(url, timeout=self.timeout).json()
+		response = session.get(url, timeout=self.timeout).json()
 		response = response['data']
 		line = '%s\n%s'
 		progressDialog = control.progressDialog
@@ -135,8 +143,7 @@ class AllDebrid:
 			control.setSetting('alldebrid.token', '')
 			control.setSetting('alldebrid.username', '')
 			control.okDialog(title=40059, message=40009)
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def account_info(self):
 		response = self._get('user')
@@ -159,9 +166,7 @@ class AllDebrid:
 			items += [getLS(40041) % expires]
 			items += [getLS(40042) % days_remaining]
 			return control.selectDialog(items, 'AllDebrid')
-		except:
-			log_utils.error()
-		return
+		except: log_utils.error()
 
 	def check_cache(self, hashes):
 		try:
@@ -169,18 +174,14 @@ class AllDebrid:
 			response = self._post('magnet/instant', data)
 			try: return response
 			except: return None
-		except:
-			log_utils.error()
-			return None
+		except: log_utils.error()
 
 	def check_single_magnet(self, hash_string):
 		try:
 			cache_info = self.check_cache(hash_string)['magnets'][0]
 			try: return cache_info['instant']
 			except: return None
-		except:
-			log_utils.error()
-			return None
+		except: log_utils.error()
 
 	def unrestrict_link(self, link, returnAll=False):
 		try:
@@ -191,9 +192,7 @@ class AllDebrid:
 			else:
 				try: return response['link']
 				except: return None
-		except:
-			log_utils.error()
-			return None
+		except: log_utils.error()
 
 	def create_transfer(self, magnet):
 		try:
@@ -205,9 +204,7 @@ class AllDebrid:
 			log_utils.log('AllDebrid: Sending MAGNET to cloud: %s' % magnet, __name__, log_utils.LOGDEBUG)
 			try: return result.get('id', "")
 			except: return None
-		except:
-			log_utils.error()
-		return None
+		except: log_utils.error()
 
 	def list_transfer(self, transfer_id):
 		try:
@@ -216,9 +213,7 @@ class AllDebrid:
 			result = self._get(url, url_append)
 			try: return result['magnets']
 			except: return None
-		except:
-			log_utils.error()
-			return None
+		except: log_utils.error()
 
 	def delete_transfer(self, transfer_id, folder_name=None, silent=True):
 		try:
@@ -234,8 +229,7 @@ class AllDebrid:
 					log_utils.log('%s successfully deleted from the AllDebrid cloud' % folder_name, __name__, log_utils.LOGDEBUG)
 					control.refresh()
 					return
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def restart_transfer(self, transfer_id, folder_name=None, silent=True):
 		try:
@@ -250,8 +244,7 @@ class AllDebrid:
 					if self.server_notifications: control.notification(message=response.get('message'), icon=ad_icon)
 					log_utils.log('AllDebrid: %s' % response.get('message'), __name__, log_utils.LOGDEBUG)
 					return control.refresh()
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def user_cloud(self):
 		url = 'magnet/status'
@@ -295,8 +288,7 @@ class AllDebrid:
 				item.setArt({'icon': ad_icon, 'poster': ad_icon, 'thumb': ad_icon, 'fanart': addonFanart, 'banner': ad_icon})
 				item.setInfo(type='video', infoLabels='')
 				control.addItem(handle=syshandle, url=url, listitem=item, isFolder=isFolder)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		control.content(syshandle, 'files')
 		control.directory(syshandle, cacheToDisc=True)
 
@@ -321,8 +313,7 @@ class AllDebrid:
 				item.setArt({'icon': ad_icon, 'poster': ad_icon, 'thumb': ad_icon, 'fanart': addonFanart, 'banner': ad_icon})
 				item.setInfo(type='video', infoLabels='')
 				control.addItem(handle=syshandle, url=url, listitem=item, isFolder=True)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		control.content(syshandle, 'files')
 		control.directory(syshandle, cacheToDisc=True)
 
@@ -373,8 +364,7 @@ class AllDebrid:
 				item.setArt({'icon': ad_icon, 'poster': ad_icon, 'thumb': ad_icon, 'fanart': addonFanart, 'banner': ad_icon})
 				item.setInfo(type='video', infoLabels='')
 				control.addItem(handle=syshandle, url=url, listitem=item, isFolder=False)
-			except:
-				log_utils.error()
+			except: log_utils.error()
 		control.content(syshandle, 'files')
 		control.directory(syshandle, cacheToDisc=True)
 
@@ -423,8 +413,7 @@ class AllDebrid:
 							if not any(x in compare_link for x in extras_filtering_list):
 								media_id = i['link']
 								break
-						except:
-							log_utils.error()
+						except: log_utils.error()
 			else:
 				media_id = max(valid_results, key=lambda x: x.get('size')).get('link', None)
 			if not self.store_to_cloud: self.delete_transfer(transfer_id)
@@ -526,8 +515,7 @@ class AllDebrid:
 			if not self.hosts['AllDebrid']: return False
 			if any(host in item for item in self.hosts['AllDebrid']): return True
 			return False
-		except:
-			log_utils.error()
+		except: log_utils.error()
 
 	def get_hosts(self):
 		url = 'hosts'
@@ -541,6 +529,5 @@ class AllDebrid:
 				try: extend(v['domains'])
 				except: pass
 			hosts_dict['AllDebrid'] = list(set(hosts))
-		except:
-			log_utils.error()
+		except: log_utils.error()
 		return hosts_dict

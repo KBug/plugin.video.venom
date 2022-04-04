@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-# created by Venom (updated 11-17-2021)
+# created by Venom (updated 3-29-2022)
 """
 	Venom Add-on
 """
 
 import re
 from resources.lib.cloud_scrapers import cloud_utils
-from resources.lib.debrid import premiumize
+from resources.lib.debrid.premiumize import Premiumize
 from resources.lib.modules.control import setting as getSetting
 from resources.lib.modules.source_utils import supported_video_extensions
 from fenomscrapers.modules import source_utils as fs_utils
@@ -34,7 +34,7 @@ class source:
 			self.episode = str(data['episode']) if 'tvshowtitle' in data else None
 			query_list = self.episode_query_list() if 'tvshowtitle' in data else self.year_query_list()
 			# log_utils.log('query_list = %s' % query_list)
-			cloud_files = premiumize.Premiumize().my_files_all()
+			cloud_files = Premiumize().my_files_all()
 			if not cloud_files: return sources
 			cloud_files = [i for i in cloud_files if i['path'].lower().endswith(tuple(supported_video_extensions()))] # this only lets folder names thru with known video extensions..?
 			if not cloud_files: return sources
@@ -51,7 +51,6 @@ class source:
 				name = item.get('name', '')
 				invalids = ('.img', '.bin', '.dat', '.mpls', '.mpl', '.bdmv', '.bdm', '.disc')
 				if name.lower().endswith(invalids): continue
-
 				path = item.get('path', '').lower()
 				if not cloud_utils.cloud_check_title(title, aliases, path): continue
 				rt = cloud_utils.release_title_format(name)
@@ -99,7 +98,7 @@ class source:
 		return sources
 
 	def year_query_list(self):
-		return [str(self.year), str(int(self.year)+1), str(int(self.year)-1)]
+		return [str(self.year), str(int(self.year)+1), str(int(self.year)-1)] if self.year else []
 
 	def episode_query_list(self):
 		return [
@@ -109,6 +108,8 @@ class source:
 				'[.-]%02dx%02d[.-]' % (int(self.season), int(self.episode)),
 				's%de%02d' % (int(self.season), int(self.episode)),
 				's%02de%02d' % (int(self.season), int(self.episode)),
+				's%dep%02d' % (int(self.season), int(self.episode)),
+				's%02dep%02d' % (int(self.season), int(self.episode)),
 				'season%depisode%d' % (int(self.season), int(self.episode)),
 				'season%depisode%02d' % (int(self.season), int(self.episode)),
 				'season%02depisode%02d' % (int(self.season), int(self.episode))]
@@ -131,7 +132,7 @@ class source:
 
 	def resolve(self, item_id):
 		try:
-			details = premiumize.Premiumize().item_details(item_id)
+			details = Premiumize().item_details(item_id)
 			url = details.get('link', '')
 			return url
 		except:

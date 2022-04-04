@@ -118,8 +118,7 @@ def _get_source_attr(xml_file, name, attr, type='video'):
 def _db_execute(db_name, command):
 	databaseFile = _get_database(db_name)
 	if not databaseFile: return False
-	try: from sqlite3 import dbapi2
-	except ImportError: from pysqlite2 import dbapi2
+	from sqlite3 import dbapi2
 	dbcon = dbapi2.connect(databaseFile)
 	dbcur = dbcon.cursor()
 	dbcur.execute(command)

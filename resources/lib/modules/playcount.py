@@ -291,7 +291,7 @@ def tvshowsUpdate(imdb, tvdb):
 				result = cache.get(tmdb_indexer.TVshows().IdLookup, 96, imdb, tvdb)
 				tmdb = str(result.get('id')) if result else ''
 			except:
-				if control.setting('debug.level') != '1': return
+				if getSetting('debug.level') != '1': return
 				from resources.lib.modules import log_utils
 				return log_utils.log('tvshowtitle: (%s) missing tmdb_id: ids={imdb: %s, tmdb: %s, tvdb: %s}' % (tvshowtitle, imdb, tmdb, tvdb), __name__, log_utils.LOGDEBUG) # log TMDb shows that they do not have
 		items = cache.get(tmdb_indexer.TVshows().get_showSeasons_meta, 96, tmdb)
